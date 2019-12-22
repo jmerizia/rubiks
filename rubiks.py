@@ -220,30 +220,37 @@ def generate_or_load_dataset() -> tuple:
     num_train = int(len(examples)*0.80)
     num_test  = int(len(examples)*0.20)
     random.shuffle(examples)
-    examples_train = sorted(examples[:num_train])
-    examples_test  = sorted(examples[:num_test])
-
+    examples_train = examples[:num_train]
+    examples_test  = examples[:num_test]
+    
     # Shape the data
-    labels_train = np.array([float(d) for d, s in examples_train])
-    labels_test  = np.array([float(d) for d, s in examples_test ])
+    labels_train = np.array([float(d) / 7.0 for d, s in examples_train])
+    labels_test  = np.array([float(d) / 7.0 for d, s in examples_test ])
     images_train = np.stack([state_to_image(s) for d, s in examples_train])
     images_test  = np.stack([state_to_image(s) for d, s in examples_test ])
 
     labels_train = labels_train.reshape((-1, 1))
-    labels_test  = labels_train.reshape((-1, 1))
+    labels_test  = labels_test.reshape((-1, 1))
 
     return (images_train, labels_train, images_test, labels_test)
 
 
 images_train, labels_train, images_test, labels_test = generate_or_load_dataset()
+print('images_train', images_train.shape)
+print('labels_train', labels_train.shape)
+print('images_test', images_test.shape)
+print('labels_test', labels_test.shape)
 model = CNN()
 model.train(
-    examples=images_train,
-    labels=labels_train,
+    train_x=images_train,
+    train_y=labels_train,
+    test_x=images_test,
+    test_y=labels_test,
     epochs=10
-    )
+)
 quit()
-mode.predict()
+
+model.predict()
 
 graph  = RubiksGraph(heuristic=asdf)
 target = RubiksState()

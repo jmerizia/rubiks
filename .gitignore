@@ -3,3 +3,4 @@
 __pycache__/
 rubiks_cache.in
 venv/
+logs/
