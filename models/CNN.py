@@ -22,8 +22,8 @@ class ConvNet(Model):
 
         self.fc1 = layers.Dense(1024, activation=tf.nn.relu)
         self.fc2 = layers.Dense(512, activation=tf.nn.relu)
-        self.fc3 = layers.Dense(512)
-        self.dropout = layers.Dropout(rate=0.2)
+        self.fc3 = layers.Dense(128, activation=tf.nn.relu)
+        self.dropout = layers.Dropout(rate=0.5)
 
         self.out = layers.Dense(1)
 
@@ -81,8 +81,9 @@ class CNN:
 
         for epoch in range(1, epochs+1):
             print('=== Epoch ', epoch, '===')
-            total_loss = 0
-            total_acc  = 0
+            total_loss   = 0
+            total_acc    = 0
+            total_trials = 0
             step = 0
             for i in range(0, num_examples, self.batch_size):
                 step += 1
@@ -98,8 +99,9 @@ class CNN:
                     loss = self.get_loss(pred, batch_y)
                     acc  = self.get_acc(pred, batch_y)
                     print("step: {}, loss: {}, acc: {}".format(step, loss, acc))
-                    total_loss  += loss
-                    total_acc   += acc
+                    total_loss   += loss
+                    total_acc    += acc
+                    total_trials += 1
 
             # evaluate test set loss / accuracy
             pred = self.conv_net(test_x)
@@ -108,8 +110,8 @@ class CNN:
 
             # log results for viewing in tensorboard
             with train_summary_writer.as_default():
-                tf.summary.scalar('loss',     total_loss / step, step=epoch)
-                tf.summary.scalar('accuracy', total_acc  / step, step=epoch)
+                tf.summary.scalar('loss',     total_loss / total_trials, step=epoch)
+                tf.summary.scalar('accuracy', total_acc  / total_trials, step=epoch)
 
             with test_summary_writer.as_default():
                 tf.summary.scalar('loss',     test_loss, step=epoch)

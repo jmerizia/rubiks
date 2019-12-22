@@ -246,7 +246,7 @@ model.train(
     train_y=labels_train,
     test_x=images_test,
     test_y=labels_test,
-    epochs=10
+    epochs=30
 )
 quit()
 
