@@ -18,10 +18,11 @@ class ExampleAction(Action):
         self.edge = edge
 
     def __str__(self):
-        return str(self.edge)
+        return '({}, {})'.format(self.edge[0], self.edge[1])
 
     def __repr__(self):
-        return str(self.edge)
+        return str(self)
+
 
 class ExampleState(State):
 
@@ -41,7 +42,13 @@ class ExampleState(State):
         return str(self.label)
 
     def __repr__(self):
-        return str(self.label)
+        return str(self)
+
+    def apply_action(self, a: ExampleAction) -> 'ExampleState':
+        if a.edge[0] != self.label:
+            print('apply_action :: ExampleAction {} cannot be applied to state {}'.format(str(a), str(self)))
+        return ExampleState(a.edge[1])
+
 
 class ExampleGraph(Graph):
 
@@ -51,15 +58,20 @@ class ExampleGraph(Graph):
     def get_next_actions(self, s: State) -> list:
         return [ExampleAction((s.label, nxt)) for nxt in adj[s.label]]
 
-    def apply_action(self, a: Action, s: State) -> State:
-        if a.edge[0] != s.label:
-            print('apply_action :: Action {} cannot be applied to state {}'.format(str(a), str(s)))
-        return ExampleState(a.edge[1])
-
     def heuristic(self, s1: State, s2: State) -> float:
         return 0
 
-graph = ExampleGraph()
-start = ExampleState('a')
-target = ExampleState('d')
-print(graph.connected(start=start, target=target))
+
+graph  = ExampleGraph()
+start  = ExampleState('a')
+target = ExampleState('a')
+path = graph.connected(start, target)
+if path is None:
+    print('No path')
+elif path == []:
+    if start != target:
+        print('path == [], but expected start == target')
+    print('Already solved (start == target)')
+else:
+    for s, a in path:
+        print(s,'->', a)

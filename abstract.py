@@ -7,6 +7,7 @@ class Action(ABC):
     """
     pass
 
+
 class State(ABC):
     """
     This is a data holder for a Graph State.
@@ -37,6 +38,15 @@ class State(ABC):
         """
         pass
 
+    @abstractmethod
+    def apply_action(self, a: Action) -> 'State':
+        """
+        Apply an action to this state, returning a new state.
+        """
+        pass
+        # Note: 'State' is a forward reference, since it appear in the
+        #       definition of the State class.
+
 
 class Graph:
     """
@@ -51,14 +61,7 @@ class Graph:
     @abstractmethod
     def get_next_actions(self, s: State) -> list:
         """
-        Returns the next states of 
-        """
-        pass
-
-    @abstractmethod
-    def apply_action(self, a: Action, s: State) -> State:
-        """
-        Apply an action to this state, returning a new state.
+        Returns the next states in the graph.
         """
         pass
 
@@ -107,12 +110,14 @@ class Graph:
                 #       to a fixed quantity.
                 #       We probably shouldn't consider every
                 #       next step, just the top most probable ones.
-                state = self.apply_action(action, cur_state)
+                state = cur_state.apply_action(action)
                 state_hash = hash(state)
-                parent[state_hash] = (cur_state, action)
                 if state == target:
+                    parent[state_hash] = (cur_state, action)
+                    print('Found path after searching {} states'.format(len(vis) + 1))
                     return self.get_path(parent, start, target)
                 if state_hash not in vis:
+                    parent[state_hash] = (cur_state, action)
                     vis.add(state_hash)
                     new_priority = priority + 1 + self.heuristic(state, target)
                     heappush(PQ, (new_priority, state))
