@@ -235,24 +235,33 @@ def generate_or_load_dataset() -> tuple:
     return (images_train, labels_train, images_test, labels_test)
 
 
-images_train, labels_train, images_test, labels_test = generate_or_load_dataset()
-print('images_train', images_train.shape)
-print('labels_train', labels_train.shape)
-print('images_test', images_test.shape)
-print('labels_test', labels_test.shape)
-model = CNN('model_checkpoints/cnn1')
-quit()
-model = CNN()
-model.train(
-    train_x=images_train,
-    train_y=labels_train,
-    test_x=images_test,
-    test_y=labels_test
-)
-model.save('model_checkpoints/cnn1')
+def train_or_load_model():
+    model_fname = 'model_checkpoints/cnn1'
+    if os.path.exists(model_fname + '.index'):
+        # load model
+        model = CNN(model_fname)
+    else:
+        # generate data and train model
+        images_train, labels_train, images_test, labels_test = generate_or_load_dataset()
+        print('images_train', images_train.shape)
+        print('labels_train', labels_train.shape)
+        print('images_test', images_test.shape)
+        print('labels_test', labels_test.shape)
+        model = CNN()
+        model.train(
+            train_x=images_train,
+            train_y=labels_train,
+            test_x=images_test,
+            test_y=labels_test
+        )
+        model.save(model_fname)
+
+    return model
+
+
+model = train_or_load_model()
 quit()
 
-model.predict()
 
 graph  = RubiksGraph(heuristic=asdf)
 target = RubiksState()

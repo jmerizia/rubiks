@@ -49,7 +49,7 @@ class CNN:
     def __init__(self, fname=None):
         if not fname:
             self.conv_net = ConvNet()
-            self.batch_size    = 512
+            self.batch_size    = 128
             self.display_step  = 20
             self.learning_rate = 0.001
             self.epochs        = 1
