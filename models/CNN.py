@@ -21,8 +21,9 @@ class ConvNet(Model):
         self.flatten = layers.Flatten()
 
         self.fc1 = layers.Dense(1024, activation=tf.nn.relu)
-        self.fc2 = layers.Dense(512, activation=tf.nn.relu)
-        self.fc3 = layers.Dense(128, activation=tf.nn.relu)
+        self.fc2 = layers.Dense(1024, activation=tf.nn.relu)
+        self.fc3 = layers.Dense(512, activation=tf.nn.relu)
+        self.fc4 = layers.Dense(128, activation=tf.nn.relu)
         self.dropout = layers.Dropout(rate=0.5)
 
         self.out = layers.Dense(1)
@@ -37,6 +38,7 @@ class ConvNet(Model):
         x = self.fc1(x)
         x = self.fc2(x)
         x = self.fc3(x)
+        x = self.fc4(x)
         x = self.dropout(x, training=is_training)
         x = self.out(x)
         return x
@@ -46,9 +48,10 @@ class CNN:
 
     def __init__(self):
         self.conv_net = ConvNet()
-        self.batch_size = 128
-        self.display_step = 10
+        self.batch_size    = 512
+        self.display_step  = 20
         self.learning_rate = 0.001
+        self.epochs        = 500
         self.optimizer = tf.optimizers.Adam(self.learning_rate)
 
     def get_loss(self, x, y):
@@ -68,7 +71,7 @@ class CNN:
             gradients = g.gradient(loss, trainable_variables)
             self.optimizer.apply_gradients(zip(gradients, trainable_variables))
 
-    def train(self, train_x, train_y, test_x, test_y, epochs):
+    def train(self, train_x, train_y, test_x, test_y):
 
         num_examples = train_x.shape[0]
 
@@ -79,7 +82,7 @@ class CNN:
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
-        for epoch in range(1, epochs+1):
+        for epoch in range(1, self.epochs+1):
             print('=== Epoch ', epoch, '===')
             total_loss   = 0
             total_acc    = 0
