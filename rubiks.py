@@ -240,6 +240,8 @@ print('images_train', images_train.shape)
 print('labels_train', labels_train.shape)
 print('images_test', images_test.shape)
 print('labels_test', labels_test.shape)
+model = CNN('model_checkpoints/cnn1')
+quit()
 model = CNN()
 model.train(
     train_x=images_train,
@@ -247,6 +249,7 @@ model.train(
     test_x=images_test,
     test_y=labels_test
 )
+model.save('model_checkpoints/cnn1')
 quit()
 
 model.predict()

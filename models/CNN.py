@@ -46,13 +46,17 @@ class ConvNet(Model):
 
 class CNN:
 
-    def __init__(self):
-        self.conv_net = ConvNet()
-        self.batch_size    = 512
-        self.display_step  = 20
-        self.learning_rate = 0.001
-        self.epochs        = 500
-        self.optimizer = tf.optimizers.Adam(self.learning_rate)
+    def __init__(self, fname=None):
+        if not fname:
+            self.conv_net = ConvNet()
+            self.batch_size    = 512
+            self.display_step  = 20
+            self.learning_rate = 0.001
+            self.epochs        = 1
+            self.optimizer = tf.optimizers.Adam(self.learning_rate)
+        else:
+            self.conv_net = ConvNet()
+            self.conv_net.load_weights(fname)
 
     def get_loss(self, x, y):
         loss = tf.nn.l2_loss(y - x)
@@ -121,6 +125,9 @@ class CNN:
                 tf.summary.scalar('accuracy', test_acc,  step=epoch)
 
         print('Finished Training')
+
+    def save(self, fname):
+        self.conv_net.save_weights(fname)
 
     def predict(self, x):
         return self.conv_net(x)
