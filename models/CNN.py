@@ -46,7 +46,7 @@ class CNN:
 
     def __init__(self):
         self.conv_net = ConvNet()
-        self.batch_size = 512
+        self.batch_size = 128
         self.display_step = 10
         self.learning_rate = 0.001
         self.optimizer = tf.optimizers.Adam(self.learning_rate)

@@ -192,7 +192,7 @@ def state_to_image(state: RubiksState):
 
 def generate_or_load_dataset() -> tuple:
     """
-    Generate/load dataset, depending on it a rubiks_cache.in
+    Generate/load dataset, depending on it a cache_files/rubiks_cache.in
     file can be found.
     Returns a tuple of four numpy array of shape (N, width, height, 1).
     The tuple contains the following:
@@ -202,7 +202,7 @@ def generate_or_load_dataset() -> tuple:
         3. test labels
     """
 
-    cache_fname = 'rubiks_cache.in'
+    cache_fname = 'cache_files/rubiks_cache.in'
     if os.path.exists(cache_fname):
         print('Cache found, loading examples from cache')
         with open(cache_fname, 'rb') as f:
