@@ -1,5 +1,15 @@
 Proof that the product of consecutive
-numbers is odd.
+numbers is even.
+This is a fairly complex proof,
+and many optimizations can be made.
+
+Notes:
+-- All new variables must be distinct (requires full tree scan)
+-- Some rules have complex substitution rules
+-- How do you handle "multiply to both sides"?
+-- All proofs are by construction from the "Nil" statement,
+    which is just a variable taht represents "true" or a empty tree.
+-- How do you handle systems of equations?
 
 INCLUDE first_order_logic.axiom
 INCLUDE algebra.axiom
@@ -17,7 +27,19 @@ even(N) <-> exists(
 ).
 
 RULE "Definition of Odd"
-odd(N) <-> not(even(N))
+odd(N) <-> exists(
+    K,
+    and(
+        is_int(K),
+        equal(
+            N,
+            plus(times(2, K), 1)
+        )
+    )
+).
+
+RULE "Even Odd Opposites"
+even(N) <-> not(odd(N)).
 
 PROVE forall(
     N,
@@ -34,18 +56,18 @@ PROVE forall(
 
 -- It would go as follows:
 
-true ->
+Nil ->
 
 forall(
     N,
-    true
+    Nil
 ) ->
 
 forall(
     N,
     implies(
         is_int(N),
-        true
+        Nil
     )
 ) ->
 
@@ -71,25 +93,335 @@ forall(
                 K,
                 and(
                     is_int(K),
+                    equal(N, times(2, K))
+                )
+            ),
+            odd(N)
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            exists(
+                K,
+                and(
+                    is_int(K),
                     equal(
-                        N,
-                        times(2, K)
+                        times(N, plus(N, 1)),
+                        times(
+                            times(2, K),
+                            plus(times(2, K), 1)
+                        )
                     )
                 )
             ),
-            not(
-                exists(
-                    J,
-                    and(
-                        is_int(J),
+            odd(N)
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        times(N, plus(N, 1)),
+                        plus(
+                            times(times(2, K), times(2, K)),
+                            times(times(2, K), 1)
+                        )
+                    )
+                )
+            ),
+            odd(N)
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        times(N, plus(N, 1)),
+                        plus(
+                            times(times(2, 2), times(K, K)),
+                            times(2, K)
+                        )
+                    )
+                )
+            ),
+            odd(N)
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        times(N, plus(N, 1)),
+                        times(
+                            2,
+                            plus(
+                                times(2, times(K, K)),
+                                K
+                            )
+                        )
+                    )
+                )
+            ),
+            odd(N)
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    exists(
+                        M,
                         equal(
-                            N,
-                            times(2, J)
+                            times(N, plus(N, 1)),
+                            times(2, M)
+                        )
+                    )
+                )
+            ),
+            odd(N)
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            exists(
+                M,
+                equal(
+                    times(N, plus(N, 1)),
+                    times(2, M)
+                )
+            ),
+            odd(N)
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+            odd(N)
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        N,
+                        plus(times(2, K), 1)
+                    )
+                )
+            )
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        times(N, plus(N, 1)),
+                        times(
+                            plus(times(2, K), 1),
+                            plus(plus(times(2, K), 1), 1)
                         )
                     )
                 )
             )
         )
     )
-)
+) ->
 
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        times(N, plus(N, 1)),
+                        times(
+                            plus(times(2, K), 1),
+                            plus(times(2, K), 2)
+                        )
+                    )
+                )
+            )
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        times(N, plus(N, 1)),
+                        plus(
+                            times(2, 2, K, K),
+                            times(2, K, 2),
+                            times(1, 2, K),
+                            times(1, 2)
+                        )
+                    )
+                )
+            )
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        times(N, plus(N, 1)),
+                        times(
+                            2,
+                            plus(
+                                times(2, K, K),
+                                times(K, 2),
+                                times(1, K),
+                                times(1)
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    exists(
+                        M,
+                        equal(
+                            times(N, plus(N, 1)),
+                            times(2, M)
+                        )
+                    )
+                )
+            )
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+                exists(
+                    M,
+                    equal(
+                        times(N, plus(N, 1)),
+                        times(2, M)
+                    )
+                )
+            )
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(times(N, plus(N, 1))),
+            even(times(N, plus(N, 1))),
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        even(times(N, plus(N, 1)))
+    )
+).
