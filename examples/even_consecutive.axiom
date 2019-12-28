@@ -1,0 +1,95 @@
+Proof that the product of consecutive
+numbers is odd.
+
+INCLUDE first_order_logic.axiom
+INCLUDE algebra.axiom
+
+RULE "Definition of Even"
+even(N) <-> exists(
+    K,
+    and(
+        is_int(K),
+        equal(
+            N,
+            times(2, K)
+        )
+    )
+).
+
+RULE "Definition of Odd"
+odd(N) <-> not(even(N))
+
+PROVE forall(
+    N,
+    implies(
+        is_int(N),
+        even(
+            times(
+                N,
+                plus(N, 1)
+            )
+        )
+    )
+)
+
+-- It would go as follows:
+
+true ->
+
+forall(
+    N,
+    true
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        true
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            even(N),
+            not(
+                even(N)
+            )
+        )
+    )
+) ->
+
+forall(
+    N,
+    implies(
+        is_int(N),
+        or(
+            exists(
+                K,
+                and(
+                    is_int(K),
+                    equal(
+                        N,
+                        times(2, K)
+                    )
+                )
+            ),
+            not(
+                exists(
+                    J,
+                    and(
+                        is_int(J),
+                        equal(
+                            N,
+                            times(2, J)
+                        )
+                    )
+                )
+            )
+        )
+    )
+)
+
