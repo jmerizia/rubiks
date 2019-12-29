@@ -252,16 +252,17 @@ def train_or_load_model():
 class RubiksGraph(Graph):
 
     def __init__(self):
-        # make several models for use in the threadpool
-        self.models = [train_or_load_model() for _ in range(10)]
+        self.model = train_or_load_model()
 
     def get_next_actions(self, s: RubiksState) -> list:
         return [RubiksAction(a) for a in RUBIKS_ACTIONS]
 
     def heuristic(self, states: list, target: State) -> list:
-        # TODO: Make this parallel
-        return [self.model.predict(state_to_image(state)).numpy()[0][0] * 7.0
-                for state in states]
+        # This does everything in a single batch on the GPU.
+        # We must be careful if this batch gets too large.
+        # (i.e., when number of next states can't fit in GPU memory)
+        tensor = self.model.predict(list(map(state_to_image, states))) * 7
+        return [result.numpy()[0] for result in tensor]
 
 
 graph  = RubiksGraph()
