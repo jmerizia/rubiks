@@ -18,6 +18,9 @@ class ConvNet(Model):
         self.conv2 = layers.Conv2D(64, kernel_size=3, activation=tf.nn.relu)
         self.maxpool2 = layers.MaxPool2D(2, strides=2)
 
+        self.conv3 = layers.Conv2D(64, kernel_size=3, activation=tf.nn.relu)
+        self.maxpool3 = layers.MaxPool2D(2, strides=2)
+
         self.flatten = layers.Flatten()
 
         self.fc1 = layers.Dense(1024, activation=tf.nn.relu)
@@ -49,10 +52,10 @@ class CNN:
     def __init__(self, fname=None):
         if not fname:
             self.conv_net = ConvNet()
-            self.batch_size    = 128
+            self.batch_size    = 512
             self.display_step  = 20
             self.learning_rate = 0.001
-            self.epochs        = 1
+            self.epochs        = 800
             self.optimizer = tf.optimizers.Adam(self.learning_rate)
         else:
             self.conv_net = ConvNet()

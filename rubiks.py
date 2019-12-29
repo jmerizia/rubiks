@@ -238,9 +238,11 @@ def generate_or_load_dataset() -> tuple:
 def train_or_load_model():
     model_fname = 'model_checkpoints/cnn1'
     if os.path.exists(model_fname + '.index'):
+        print('Found saved model -- loading it')
         # load model
         model = CNN(model_fname)
     else:
+        print('No model found. Training one instead')
         # generate data and train model
         images_train, labels_train, images_test, labels_test = generate_or_load_dataset()
         print('images_train', images_train.shape)
@@ -260,6 +262,8 @@ def train_or_load_model():
 
 
 model = train_or_load_model()
+
+print(model.predict([]))
 quit()
 
 
