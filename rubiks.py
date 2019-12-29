@@ -3,6 +3,7 @@ import random
 import os
 import pickle
 import numpy as np
+from multiprocessing import Pool
 from models.CNN import CNN
 
 RUBIKS_PERMS = {
@@ -55,6 +56,29 @@ RUBIKS_PERMS = {
     }
 }
 
+# The extended permutations are just compositions of 
+# the basic permutations, but count as single moves.
+EXTENDED_RUBIKS_PERMS = {
+        'F*': (3, 'F'),
+        'R*': (3, 'R'),
+        'L*': (3, 'L'),
+        'D*': (3, 'D'),
+        'U*': (3, 'U'),
+        'B*': (3, 'B'),
+        'F2': (2, 'F'),
+        'R2': (2, 'R'),
+        'L2': (2, 'L'),
+        'D2': (2, 'D'),
+        'U2': (2, 'U'),
+        'B2': (2, 'B')
+}
+
+RUBIKS_ACTIONS = [
+    'F' , 'R' , 'L' , 'D' , 'U' , 'B' ,
+    'F*', 'R*', 'L*', 'D*', 'U*', 'B*',
+    'F2', 'R2', 'L2', 'D2', 'U2', 'B2'
+]
+
 RUBIKS_COLORS = {
      1: 1,   2: 1,   3: 1,   4: 1,   5: 1,   6: 1,   7: 1,   8: 1,   9: 1,
     10: 2,  11: 2,  12: 2,  13: 2,  14: 2,  15: 2,  16: 2,  17: 2,  18: 2,
@@ -64,24 +88,33 @@ RUBIKS_COLORS = {
     46: 6,  47: 6,  48: 6,  49: 6,  50: 6,  51: 6,  52: 6,  53: 6,  54: 6
 }
 
-RUBIKS_ACTIONS = ['F', 'R', 'L', 'D', 'U', 'B']
 
 class RubiksAction(Action):
 
-    def __init__(self, name):
-        if name not in ['F', 'R', 'L', 'D', 'U', 'B']:
-            raise ValueError('RubiksAction.__init__ :: Invalid name {}'.format(name))
-        self.name = name
+    def get_perm(self, name):
+
+        if name in RUBIKS_PERMS:
+            mult, basic_name = 1, name
+        elif name in EXTENDED_RUBIKS_PERMS:
+            mult, basic_name = EXTENDED_RUBIKS_PERMS[name]
+
         # The above permutations are not written fully.
         # They only map the sticker spots that they change.
         # All other stickers are not represented.
         # So, we must add those invariant mappings as well.
-        self.perm = dict()
+        perm = dict()
         for i in range(1, 6*9+1):
-            if i in RUBIKS_PERMS[name]:
-                self.perm[i] = RUBIKS_PERMS[name][i]
+            if i in RUBIKS_PERMS[basic_name]:
+                perm[i] = RUBIKS_PERMS[basic_name][i]
             else:
-                self.perm[i] = i
+                perm[i] = i
+        return (mult, perm)
+
+    def __init__(self, name):
+        if name not in RUBIKS_ACTIONS:
+            raise ValueError('RubiksAction.__init__ :: Invalid name {}'.format(name))
+        self.name = name
+        self.mult, self.perm = self.get_perm(name)
 
     def __str__(self):
         return self.name
@@ -121,10 +154,13 @@ class RubiksState(State):
         if type(a) != RubiksAction:
             raise ValueError('RubiksState.apply_action :: bad action type {}'.format(
                 type(a)))
-        new_perm = list(range(1, 6*9+1))
-        for i in range(1, 6*9+1):
-            new_perm[a.perm[i] - 1] = self.perm[i - 1]
-        return RubiksState(tuple(new_perm))
+        cur_perm = self.perm
+        for _ in range(a.mult):
+            new_perm = list(range(1, 6*9+1))
+            for i in range(1, 6*9+1):
+                new_perm[a.perm[i] - 1] = cur_perm[i - 1]
+            cur_perm = new_perm
+        return RubiksState(tuple(cur_perm))
 
 
 def random_scramble(k: int) -> RubiksState:
@@ -138,6 +174,13 @@ def random_scramble(k: int) -> RubiksState:
         state = state.apply_action(action)
     return state
 
+def generate_examples_helper(k: int) -> list:
+    # It makes sense that the number of scrambles must
+    # increase, as the number of steps away increases.
+    # This number can be tweaked to give more,
+    # or fewer scrambles.
+    num_scrambles = 50*k*k + 50
+    return [(k, random_scramble(k)) for _ in range(num_scrambles)]
 
 def generate_examples(k: int) -> list:
     """
@@ -147,16 +190,11 @@ def generate_examples(k: int) -> list:
     Each scrambled state is listed in a pair
     with the associated k value.
     """
+    p = Pool(20)
     examples = []
-    for i in range(k+1):
-        # It makes sense that the number of scrambles must
-        # increase, as the number of steps away increases.
-        # This number can be tweaked to give more,
-        # or fewer scrambles.
-        num_scrambles = 10*k*k + 10
-        examples += [(i, random_scramble(i)) for _ in range(num_scrambles)]
+    for example in p.map(generate_examples_helper, range(k+1)):
+        examples += example
     return examples
-
 
 def state_to_image(state: RubiksState):
     # Just a neat trick:
@@ -224,13 +262,13 @@ def generate_or_load_dataset() -> tuple:
 
 
 def train_or_load_model():
-    model_fname = 'model_checkpoints/cnn1'
+    model_fname = 'model_checkpoints/cnn2'
     if os.path.exists(model_fname + '.index'):
         print('Found saved model -- loading it')
         # load model
         model = CNN(model_fname)
     else:
-        print('No model found. Training one instead')
+        print('No model "{}" found. Training one instead'.format(model_fname))
         # generate data and train model
         images_train, labels_train, images_test, labels_test = generate_or_load_dataset()
         print('images_train', images_train.shape)
@@ -255,7 +293,9 @@ class RubiksGraph(Graph):
         self.model = train_or_load_model()
 
     def get_next_actions(self, s: RubiksState) -> list:
-        return [RubiksAction(a) for a in RUBIKS_ACTIONS]
+        actions = [RubiksAction(a) for a in RUBIKS_ACTIONS]
+        random.shuffle(actions)
+        return actions
 
     def heuristic(self, states: list, target: State) -> list:
         # This does everything in a single batch on the GPU.
@@ -263,37 +303,20 @@ class RubiksGraph(Graph):
         # (i.e., when number of next states can't fit in GPU memory)
         tensor = self.model.predict(list(map(state_to_image, states))) * 7
         return [result.numpy()[0] for result in tensor]
+        #return [0 for _ in states]
 
 
 graph  = RubiksGraph()
 # Target is the solved state
 target = RubiksState()
 # Start at some scrambled state:
-start  = RubiksState() \
-            .apply_action(RubiksAction('L')) \
-            .apply_action(RubiksAction('L')) \
-            .apply_action(RubiksAction('L')) \
-            .apply_action(RubiksAction('B')) \
-            .apply_action(RubiksAction('B')) \
-            .apply_action(RubiksAction('B')) \
-            .apply_action(RubiksAction('F')) \
-            .apply_action(RubiksAction('F')) \
-            .apply_action(RubiksAction('F')) \
-            .apply_action(RubiksAction('R')) \
-            .apply_action(RubiksAction('R')) \
-            .apply_action(RubiksAction('R')) \
-            .apply_action(RubiksAction('R')) \
-            .apply_action(RubiksAction('R')) \
-            .apply_action(RubiksAction('R')) \
-            .apply_action(RubiksAction('D')) \
-            .apply_action(RubiksAction('D')) \
-            .apply_action(RubiksAction('D')) \
-            .apply_action(RubiksAction('U')) \
-            .apply_action(RubiksAction('U')) \
-            .apply_action(RubiksAction('U')) \
-            .apply_action(RubiksAction('U')) \
-            .apply_action(RubiksAction('U')) \
-            .apply_action(RubiksAction('U'))
+scramble = 'F* R* U* B* D* B* R* D*'.split()
+scramble = 'F* R* U* B*'.split()
+scramble = 'F* R* U* B* D* B2 D2'.split()
+start = RubiksState()
+for action in scramble:
+    start = start.apply_action(RubiksAction(action))
+
 path = graph.connected(start, target)
 if path is None:
     print('No path')
