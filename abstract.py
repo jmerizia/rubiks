@@ -1,6 +1,5 @@
 from heapq import heappush, heappop, heapify
 from abc import ABC, abstractmethod
-from multiprocessing import Pool
 
 
 class Action(ABC):
@@ -108,7 +107,6 @@ class Graph:
         parent = dict()
         vis.add(hash(start))
         heappush(PQ, (0, start))
-        p = Pool(2)
         while PQ:
             priority, cur_state = heappop(PQ)
             next_actions = self.get_next_actions(cur_state)
