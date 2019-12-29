@@ -1,5 +1,7 @@
 from heapq import heappush, heappop, heapify
 from abc import ABC, abstractmethod
+from multiprocessing import Pool
+
 
 class Action(ABC):
     """
@@ -66,9 +68,11 @@ class Graph:
         pass
 
     @abstractmethod
-    def heuristic(self, s1: State, s2: State) -> float:
+    def heuristic(self, states: list, target: State) -> list:
         """
-        A heuristic between two states.
+        Calculate a heuristic between a list of states and a target state.
+        This should be implemented blocking.
+        Implement in parallel for good performance.
         """
         pass
 
@@ -84,6 +88,7 @@ class Graph:
             cur, action = tree[hash(cur)]
             path.append((cur, action))
         return list(reversed(path))
+
 
     def connected(self, start: State, target: State, timeout=0) -> list:
         """
@@ -103,9 +108,17 @@ class Graph:
         parent = dict()
         vis.add(hash(start))
         heappush(PQ, (0, start))
+        p = Pool(2)
         while PQ:
             priority, cur_state = heappop(PQ)
-            for action in self.get_next_actions(cur_state):
+            next_actions = self.get_next_actions(cur_state)
+            # Pre-compute all of the heuristic values.
+            # Note: heuristic() should be implemented in parallel for good performance.
+            heuristics = self.heuristic(
+                    [cur_state.apply_action(a) for a in next_actions],
+                    target)
+
+            for action, heuristic in zip(next_actions, heuristics):
                 # TODO: We may want to prune these next actions
                 #       to a fixed quantity.
                 #       We probably shouldn't consider every
@@ -119,8 +132,10 @@ class Graph:
                 if state_hash not in vis:
                     parent[state_hash] = (cur_state, action)
                     vis.add(state_hash)
-                    new_priority = priority + 1 + self.heuristic(state, target)
+                    new_priority = priority + 1 + heuristic
                     heappush(PQ, (new_priority, state))
+                if len(vis) % 200 == 0:
+                    print('Checked {} states'.format(len(vis)))
 
         # In practice, this line should never be run,
         # since the search space will be very large.

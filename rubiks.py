@@ -127,18 +127,6 @@ class RubiksState(State):
         return RubiksState(tuple(new_perm))
 
 
-class RubiksGraph(Graph):
-
-    def __init__(self, heuristic):
-        self.heuristic = heuristic
-
-    def get_next_actions(self, s: RubiksState) -> list:
-        return [RubiksAction(a) for a in RUBIKS_ACTIONS]
-
-    def heuristic(self, s1: State, s2: State) -> float:
-        return 0
-
-
 def random_scramble(k: int) -> RubiksState:
     """
     Returns a random scramble of distance no greater
@@ -261,21 +249,50 @@ def train_or_load_model():
     return model
 
 
-model = train_or_load_model()
+class RubiksGraph(Graph):
 
-print(model.predict([]))
-quit()
+    def __init__(self):
+        # make several models for use in the threadpool
+        self.models = [train_or_load_model() for _ in range(10)]
+
+    def get_next_actions(self, s: RubiksState) -> list:
+        return [RubiksAction(a) for a in RUBIKS_ACTIONS]
+
+    def heuristic(self, states: list, target: State) -> list:
+        # TODO: Make this parallel
+        return [self.model.predict(state_to_image(state)).numpy()[0][0] * 7.0
+                for state in states]
 
 
-graph  = RubiksGraph(heuristic=asdf)
+graph  = RubiksGraph()
+# Target is the solved state
 target = RubiksState()
+# Start at some scrambled state:
 start  = RubiksState() \
             .apply_action(RubiksAction('L')) \
             .apply_action(RubiksAction('L')) \
             .apply_action(RubiksAction('L')) \
             .apply_action(RubiksAction('B')) \
             .apply_action(RubiksAction('B')) \
-            .apply_action(RubiksAction('F'))
+            .apply_action(RubiksAction('B')) \
+            .apply_action(RubiksAction('F')) \
+            .apply_action(RubiksAction('F')) \
+            .apply_action(RubiksAction('F')) \
+            .apply_action(RubiksAction('R')) \
+            .apply_action(RubiksAction('R')) \
+            .apply_action(RubiksAction('R')) \
+            .apply_action(RubiksAction('R')) \
+            .apply_action(RubiksAction('R')) \
+            .apply_action(RubiksAction('R')) \
+            .apply_action(RubiksAction('D')) \
+            .apply_action(RubiksAction('D')) \
+            .apply_action(RubiksAction('D')) \
+            .apply_action(RubiksAction('U')) \
+            .apply_action(RubiksAction('U')) \
+            .apply_action(RubiksAction('U')) \
+            .apply_action(RubiksAction('U')) \
+            .apply_action(RubiksAction('U')) \
+            .apply_action(RubiksAction('U'))
 path = graph.connected(start, target)
 if path is None:
     print('No path')
