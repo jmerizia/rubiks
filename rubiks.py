@@ -2,9 +2,11 @@ from abstract import State, Action, Graph
 import random
 import os
 import pickle
+import time
 import numpy as np
 from multiprocessing import Pool
 from models.CNN import CNN
+
 
 RUBIKS_PERMS = {
     'F': {
@@ -262,7 +264,7 @@ def generate_or_load_dataset() -> tuple:
 
 
 def train_or_load_model():
-    model_fname = 'model_checkpoints/cnn2'
+    model_fname = 'model_checkpoints/cnn4'
     if os.path.exists(model_fname + '.index'):
         print('Found saved model -- loading it')
         # load model
@@ -276,12 +278,15 @@ def train_or_load_model():
         print('images_test', images_test.shape)
         print('labels_test', labels_test.shape)
         model = CNN()
+        st = time.time()
         model.train(
             train_x=images_train,
             train_y=labels_train,
             test_x=images_test,
             test_y=labels_test
         )
+        en = time.time()
+        print("Trained model! elapsed time:", en - st)
         model.save(model_fname)
 
     return model
@@ -305,8 +310,8 @@ class RubiksGraph(Graph):
         return [result.numpy()[0] for result in tensor]
         #return [0 for _ in states]
 
-
 graph  = RubiksGraph()
+quit()
 # Target is the solved state
 target = RubiksState()
 # Start at some scrambled state:
