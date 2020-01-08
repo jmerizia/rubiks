@@ -252,19 +252,16 @@ def generate_or_load_dataset() -> tuple:
     examples_test  = examples[:num_test]
     
     # Shape the data
-    labels_train = np.array([float(d) / 7.0 for d, s in examples_train])
-    labels_test  = np.array([float(d) / 7.0 for d, s in examples_test ])
-    images_train = np.stack([state_to_image(s) for d, s in examples_train])
-    images_test  = np.stack([state_to_image(s) for d, s in examples_test ])
-
-    labels_train = labels_train.reshape((-1, 1))
-    labels_test  = labels_test.reshape((-1, 1))
+    labels_train = [float(d) / 7.0 for d, s in examples_train]
+    labels_test  = [float(d) / 7.0 for d, s in examples_test ]
+    images_train = [state_to_image(s) for d, s in examples_train]
+    images_test  = [state_to_image(s) for d, s in examples_test]
 
     return (images_train, labels_train, images_test, labels_test)
 
 
 def train_or_load_model():
-    model_fname = 'model_checkpoints/cnn4'
+    model_fname = 'model_checkpoints/cnn6'
     if os.path.exists(model_fname + '.index'):
         print('Found saved model -- loading it')
         # load model
@@ -273,10 +270,10 @@ def train_or_load_model():
         print('No model "{}" found. Training one instead'.format(model_fname))
         # generate data and train model
         images_train, labels_train, images_test, labels_test = generate_or_load_dataset()
-        print('images_train', images_train.shape)
-        print('labels_train', labels_train.shape)
-        print('images_test', images_test.shape)
-        print('labels_test', labels_test.shape)
+        #print('images_train', images_train.shape)
+        #print('labels_train', labels_train.shape)
+        #print('images_test', images_test.shape)
+        #print('labels_test', labels_test.shape)
         model = CNN()
         st = time.time()
         model.train(
