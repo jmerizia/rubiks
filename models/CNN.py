@@ -24,39 +24,39 @@ tf.keras.backend.set_floatx('float32')
 
 class ResidFC(tfk.layers.Layer):
 
-    def __init__(self, size, activation, dropout_rate):
+    def __init__(self, size):
         super(ResidFC, self).__init__()
         self.size = size
-        self.fc1 = tfk.layers.Dense(size, activation=activation)
+        self.fc1 = tfk.layers.Dense(size, activation=tf.nn.relu)
         self.fc2 = tfk.layers.Dense(size)
-        self.dropout = tfk.layers.Dropout(rate=dropout_rate)
 
     @tf.function
-    def call(self, x, training=False):
-        orig = x
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = self.dropout(x, training=training)
-        x = tf.add(orig, x)
-        x = tf.nn.relu(x)
-        return x
+    def call(self, x):
+        with tf.name_scope('ResidFC'):
+            orig = x
+            x = self.fc1(x)
+            x = self.fc2(x)
+            x = tf.add(orig, x)
+            x = tf.nn.relu(x)
+            return x
 
 
 class ResidBlock(tfk.layers.Layer):
 
-    def __init__(self, size, activation, dropout_rate):
+    def __init__(self, size):
         super(ResidBlock, self).__init__()
         self.size = size
-        self.res1 = ResidFC(size, activation=activation, dropout_rate=dropout_rate)
-        self.res2 = ResidFC(size, activation=activation, dropout_rate=dropout_rate)
-        self.res3 = ResidFC(size, activation=activation, dropout_rate=dropout_rate)
+        self.res1 = ResidFC(size)
+        self.res2 = ResidFC(size)
+        self.res3 = ResidFC(size)
 
     @tf.function
-    def call(self, x, training=False):
-        x = self.res1(x, training=training)
-        x = self.res2(x, training=training)
-        x = self.res3(x, training=training)
-        return x
+    def call(self, x):
+        with tf.name_scope('ResidBlock'):
+            x1 = self.res1(x)
+            x2 = self.res2(x1)
+            x3 = self.res3(x2)
+            return x
 
 
 class ResidNet(tfk.Model):
@@ -64,22 +64,27 @@ class ResidNet(tfk.Model):
     def __init__(self, dropout_rate):
         super(ResidNet, self).__init__()
 
-        self.fc = tfk.layers.Dense(256, activation=tf.nn.relu)
-        self.b1 = ResidBlock(256, activation=tf.nn.relu, dropout_rate=dropout_rate)
-        self.b2 = ResidBlock(256, activation=tf.nn.relu, dropout_rate=dropout_rate)
-        self.b3 = ResidBlock(256, activation=tf.nn.relu, dropout_rate=dropout_rate)
+        self.fc   = tfk.layers.Dense(256, activation=tf.nn.relu)
+        self.b1   = ResidBlock(256)
+        self.b2   = ResidBlock(256)
+        self.b3   = ResidBlock(256)
+        self.b4   = ResidBlock(256)
+        self.drop = tfk.layers.Dropout(rate=dropout_rate)
 
         self.out = tfk.layers.Dense(1)
+        #self.test = ResidFC(256)
 
     @tf.function
     def call(self, x, training=False):
-        x = self.fc(x)
-        x = self.b1(x, training=training)
-        x = self.b2(x, training=training)
-        x = self.b3(x, training=training)
-        x = self.out(x)
-        return x
-
+        with tf.name_scope('ResidNet'):
+            x = self.fc(x)
+            x = self.b1(x)
+            x = self.b2(x)
+            x = self.drop(x, training=training)
+            x = self.b3(x)
+            x = self.b4(x)
+            x = self.out(x)
+            return x
 
 class CNN:
 
@@ -122,34 +127,36 @@ class CNN:
             gradients = g.gradient(loss, trainable_variables)
             self.optimizer.apply_gradients(zip(gradients, trainable_variables))
 
-    def profile_graph(self):
-        writer = tf.summary.create_file_writer('logs/traces/')
-        tf.summary.trace_on(graph=True, profiler=True)
-        with writer.as_default():
-            self.net(np.random.rand(1, 144))
-            tf.summary.trace_export(
-                self.model_name,
-                step=0,
-                profiler_outdir='logs/profiles')
-
     def train(self, train_x, train_y, test_x, test_y):
-
-        num_examples = len(train_x)
-        test_x  = np.array(test_x)
-        test_y  = np.stack(test_y).reshape((-1, 1))
 
         # Setup tensorboard:
         current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        train_log_dir = 'logs/{}-{}/train'.format(current_time, self.model_name)
-        test_log_dir  = 'logs/{}-{}/test'.format(current_time, self.model_name)
-        cpu_log_dir   = 'logs/{}-{}/cpu'.format(current_time, self.model_name)
-        mem_log_dir   = 'logs/{}-{}/mem'.format(current_time, self.model_name)
-        tmp_log_dir   = 'logs/{}-{}/tmp'.format(current_time, self.model_name)
+        run_name = '{}-{}'.format(current_time, self.model_name)
+        train_log_dir = 'logs/{}/train/'.format(run_name)
+        test_log_dir  = 'logs/{}/test/'.format(run_name)
+        cpu_log_dir   = 'logs/{}/cpu/'.format(run_name)
+        mem_log_dir   = 'logs/{}/mem/'.format(run_name)
+        tmp_log_dir   = 'logs/{}/tmp/'.format(run_name)
+        #trace_log_dir = 'logs/{}/'.format(run_name)
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         test_summary_writer  = tf.summary.create_file_writer(test_log_dir)
         cpu_summary_writer   = tf.summary.create_file_writer(cpu_log_dir)
         mem_summary_writer   = tf.summary.create_file_writer(mem_log_dir)
         tmp_summary_writer   = tf.summary.create_file_writer(tmp_log_dir)
+        #trace_writer         = tf.summary.create_file_writer(trace_log_dir)
+
+        # trace the model graph and save it:
+        #x = np.random.rand(1, 144)
+        #tf.summary.trace_on(graph=True, profiler=False)
+        #with trace_writer.as_default():
+        #    self.net(x)
+        #    tf.summary.trace_export(
+        #        self.model_name,
+        #        step=0)
+
+        num_examples = len(train_x)
+        test_x  = np.array(test_x)
+        test_y  = np.stack(test_y).reshape((-1, 1))
 
         for epoch in range(1, self.epochs+1):
             print('=== Epoch ', epoch, '===')

@@ -291,7 +291,6 @@ def train_or_load_model(args):
                     dropout_rate=dropout_rate,
                     learning_rate=learning_rate,
                     epochs=epochs)
-        model.profile_graph()
         st = time.time()
         model.train(
             train_x=images_train,
