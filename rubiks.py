@@ -6,6 +6,8 @@ import time
 import numpy as np
 from multiprocessing import Pool
 from models.CNN import CNN
+import argparse
+import psutil
 
 
 RUBIKS_PERMS = {
@@ -260,12 +262,22 @@ def generate_or_load_dataset() -> tuple:
     return (images_train, labels_train, images_test, labels_test)
 
 
-def train_or_load_model():
-    model_fname = 'model_checkpoints/cnn6'
+def train_or_load_model(args):
+    model_name    = args.model_name
+    batch_size    = int(args.batch_size)
+    learning_rate = float(args.learning_rate)
+    dropout_rate  = float(args.dropout_rate)
+    epochs        = int(args.epochs)
+    model_fname = 'model_checkpoints/{}'.format(model_name)
     if os.path.exists(model_fname + '.index'):
         print('Found saved model -- loading it')
         # load model
-        model = CNN(model_fname)
+        model = CNN(model_fname=model_fname,
+                    model_name=model_name,
+                    batch_size=batch_size,
+                    dropout_rate=dropout_rate,
+                    learning_rate=learning_rate,
+                    epochs=epochs)
     else:
         print('No model "{}" found. Training one instead'.format(model_fname))
         # generate data and train model
@@ -274,7 +286,12 @@ def train_or_load_model():
         #print('labels_train', labels_train.shape)
         #print('images_test', images_test.shape)
         #print('labels_test', labels_test.shape)
-        model = CNN()
+        model = CNN(model_name=model_name,
+                    batch_size=batch_size,
+                    dropout_rate=dropout_rate,
+                    learning_rate=learning_rate,
+                    epochs=epochs)
+        model.profile_graph()
         st = time.time()
         model.train(
             train_x=images_train,
@@ -291,8 +308,8 @@ def train_or_load_model():
 
 class RubiksGraph(Graph):
 
-    def __init__(self):
-        self.model = train_or_load_model()
+    def __init__(self, args):
+        self.model = train_or_load_model(args)
 
     def get_next_actions(self, s: RubiksState) -> list:
         actions = [RubiksAction(a) for a in RUBIKS_ACTIONS]
@@ -307,7 +324,21 @@ class RubiksGraph(Graph):
         return [result.numpy()[0] for result in tensor]
         #return [0 for _ in states]
 
-graph  = RubiksGraph()
+
+parser = argparse.ArgumentParser(description='Train and solve Rubiks Cubes.')
+parser.add_argument('--model-name', dest='model_name',
+        required=True, help='Name of the model to train')
+parser.add_argument('--epochs', dest='epochs',
+        required=True, help='Number of epochs to train for')
+parser.add_argument('--learning-rate', dest='learning_rate',
+        required=True, help='Learning rate for training')
+parser.add_argument('--batch-size', dest='batch_size',
+        required=True, help='Batch size for training')
+parser.add_argument('--dropout-rate', dest='dropout_rate',
+        required=True, help='Dropout rate for training')
+args = parser.parse_args()
+
+graph  = RubiksGraph(args)
 quit()
 # Target is the solved state
 target = RubiksState()

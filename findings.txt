@@ -1,0 +1,34 @@
+Just a list of some findings...
+
+2020-01-08_20-54-49:
+
+The effect of dropout...
+If you analyze the loss/acc graphs, you'll find that when dropout is 0.10,
+the test accuracy is close to the train accuracy, but when dropout is 0.00,
+the test/train are farther apart.
+However, this decreased overfitting comes at the cost of slightly decreased accuracy.
+So, I find that _some_ dropout is very helpful, but too much of it can be detrimental,
+as seen in previous runs.
+I think it shouldn't be used between each layer,
+but rather just between a few.
+
+The effect of high learning rate...
+When the algorithm begins to converge onto a local minimum,
+if the learning rate is too high,
+you will begin to "bounce out" of the local minimum.
+This can be seen as an increasingly oscillating loss/acc curve.
+
+When I keep the box fan in the room on the highest setting,
+the CPU temperature declines steadily, but it does peak
+at the beginning.
+
+The more layers I add, the better the model performs.
+Eventually, I hope to run into the vanishing gradient problem.
+
+I'm happy to see that convergence is happening sooner.
+The higher batch size was very helpful.
+It seems the shuffling step helped quite a bit,
+and now I'm going to greatly decrease the epochs :)
+
+The residual network is working out really nicely.
+It has been giving very fast convergence and high accuracy.

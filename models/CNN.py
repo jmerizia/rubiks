@@ -10,6 +10,7 @@ import os
 import numpy as np
 import random
 import time
+import psutil
 
 #os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
@@ -23,12 +24,12 @@ tf.keras.backend.set_floatx('float32')
 
 class ResidFC(tfk.layers.Layer):
 
-    def __init__(self, size, activation):
+    def __init__(self, size, activation, dropout_rate):
         super(ResidFC, self).__init__()
         self.size = size
         self.fc1 = tfk.layers.Dense(size, activation=activation)
         self.fc2 = tfk.layers.Dense(size)
-        self.dropout = tfk.layers.Dropout(rate=0.5)
+        self.dropout = tfk.layers.Dropout(rate=dropout_rate)
 
     @tf.function
     def call(self, x, training=False):
@@ -43,12 +44,12 @@ class ResidFC(tfk.layers.Layer):
 
 class ResidBlock(tfk.layers.Layer):
 
-    def __init__(self, size, activation):
+    def __init__(self, size, activation, dropout_rate):
         super(ResidBlock, self).__init__()
         self.size = size
-        self.res1 = ResidFC(size, activation)
-        self.res2 = ResidFC(size, activation)
-        self.res3 = ResidFC(size, activation)
+        self.res1 = ResidFC(size, activation=activation, dropout_rate=dropout_rate)
+        self.res2 = ResidFC(size, activation=activation, dropout_rate=dropout_rate)
+        self.res3 = ResidFC(size, activation=activation, dropout_rate=dropout_rate)
 
     @tf.function
     def call(self, x, training=False):
@@ -60,47 +61,49 @@ class ResidBlock(tfk.layers.Layer):
 
 class ResidNet(tfk.Model):
 
-    def __init__(self):
+    def __init__(self, dropout_rate):
         super(ResidNet, self).__init__()
 
         self.fc = tfk.layers.Dense(256, activation=tf.nn.relu)
-        self.b1 = ResidBlock(256, activation=tf.nn.relu)
-        self.b2 = ResidBlock(256, activation=tf.nn.relu)
-        self.b3 = ResidBlock(256, activation=tf.nn.relu)
+        self.b1 = ResidBlock(256, activation=tf.nn.relu, dropout_rate=dropout_rate)
+        self.b2 = ResidBlock(256, activation=tf.nn.relu, dropout_rate=dropout_rate)
+        self.b3 = ResidBlock(256, activation=tf.nn.relu, dropout_rate=dropout_rate)
 
-        self.out1 = tfk.layers.Dense(1)
-        self.out2 = tfk.layers.Dense(1)
-        self.out3 = tfk.layers.Dense(1)
+        self.out = tfk.layers.Dense(1)
 
     @tf.function
     def call(self, x, training=False):
-        x  = self.fc(x)
-        x1 = self.b1(x, training=training)
-        x2 = self.b2(x1, training=training)
-        x3 = self.b3(x2, training=training)
-        x3 = self.out3(x3)
-        if training:
-            x1 = self.out1(x1)
-            x2 = self.out2(x2)
-            return 0.1 * x1 + 0.1 * x2 + 0.8 * x3
-        else:
-            return x3
-
+        x = self.fc(x)
+        x = self.b1(x, training=training)
+        x = self.b2(x, training=training)
+        x = self.b3(x, training=training)
+        x = self.out(x)
+        return x
 
 
 class CNN:
 
-    def __init__(self, fname=None):
-        if not fname:
-            self.net = ResidNet()
-            self.batch_size    = 128
-            self.display_step  = 200
-            self.learning_rate = 0.0005
-            self.epochs        = 500
-            self.optimizer = tf.optimizers.Adam(self.learning_rate)
+    def __init__(self,
+                 model_fname=None,
+                 model_name='my_model',
+                 learning_rate=0.0001,
+                 batch_size=128,
+                 display_step=200,
+                 dropout_rate=0.5,
+                 epochs=200):
+        if not model_fname:
+            # we must train a new one
+            self.net           = ResidNet(dropout_rate)
+            self.model_name    = model_name
+            self.batch_size    = batch_size
+            self.display_step  = display_step
+            self.learning_rate = learning_rate
+            self.epochs        = epochs
+            self.optimizer     = tf.optimizers.Adam(self.learning_rate)
         else:
-            self.net = ConvNet()
-            self.net.load_weights(fname)
+            # we must load an existing one
+            self.net = ResidNet(dropout_rate)
+            self.net.load_weights(model_fname)
 
     def get_loss(self, x, y):
         loss = tf.nn.l2_loss(y - x)
@@ -123,9 +126,9 @@ class CNN:
         writer = tf.summary.create_file_writer('logs/traces/')
         tf.summary.trace_on(graph=True, profiler=True)
         with writer.as_default():
-            self.net(np.random.rand(144))
+            self.net(np.random.rand(1, 144))
             tf.summary.trace_export(
-                'trace',
+                self.model_name,
                 step=0,
                 profiler_outdir='logs/profiles')
 
@@ -137,10 +140,16 @@ class CNN:
 
         # Setup tensorboard:
         current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        train_log_dir = 'logs/' + current_time + '/train'
-        test_log_dir = 'logs/' + current_time + '/test'
+        train_log_dir = 'logs/{}-{}/train'.format(current_time, self.model_name)
+        test_log_dir  = 'logs/{}-{}/test'.format(current_time, self.model_name)
+        cpu_log_dir   = 'logs/{}-{}/cpu'.format(current_time, self.model_name)
+        mem_log_dir   = 'logs/{}-{}/mem'.format(current_time, self.model_name)
+        tmp_log_dir   = 'logs/{}-{}/tmp'.format(current_time, self.model_name)
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
-        test_summary_writer = tf.summary.create_file_writer(test_log_dir)
+        test_summary_writer  = tf.summary.create_file_writer(test_log_dir)
+        cpu_summary_writer   = tf.summary.create_file_writer(cpu_log_dir)
+        mem_summary_writer   = tf.summary.create_file_writer(mem_log_dir)
+        tmp_summary_writer   = tf.summary.create_file_writer(tmp_log_dir)
 
         for epoch in range(1, self.epochs+1):
             print('=== Epoch ', epoch, '===')
@@ -149,6 +158,7 @@ class CNN:
             total_acc    = 0
             total_trials = 0
             step = 0
+
             # shuffle the data to improve regularization
             combined = list(zip(train_x, train_y))
             random.shuffle(combined)
@@ -187,8 +197,19 @@ class CNN:
                 tf.summary.scalar('loss',     test_loss, step=epoch)
                 tf.summary.scalar('accuracy', test_acc,  step=epoch)
 
+            with cpu_summary_writer.as_default():
+                tf.summary.scalar('cpu', psutil.cpu_percent(), step=epoch)
+
+            with mem_summary_writer.as_default():
+                mem = psutil.virtual_memory()
+                tf.summary.scalar('mem', mem.total - mem.available, step=epoch)
+
+            with tmp_summary_writer.as_default():
+                tmp = psutil.sensors_temperatures()
+                tf.summary.scalar('tmp', tmp['k10temp'][0].current, step=epoch)
+
             en = time.time()
-            print('elapsed time = {:0.4f} seconds'.format(en - st))
+            print('elapsed time of epoch = {:0.4f} seconds'.format(en - st))
 
 
         print('Finished Training')
