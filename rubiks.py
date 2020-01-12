@@ -7,8 +7,14 @@ import numpy as np
 from multiprocessing import Pool
 from models.CNN import CNN
 import argparse
-import psutil
 
+EXAMPLE_CACHE_FNAME = os.path.join(
+        os.path.dirname(__file__), 
+        'cache_files/rubiks_cache.in')
+
+MODEL_CHECKPOINT_DIR = os.path.join(
+        os.path.dirname(__file__), 
+        'model_checkpoints/')
 
 RUBIKS_PERMS = {
     'F': {
@@ -232,16 +238,15 @@ def generate_or_load_dataset() -> tuple:
         3. test labels
     """
 
-    cache_fname = 'cache_files/rubiks_cache.in'
-    if os.path.exists(cache_fname):
+    if os.path.exists(EXAMPLE_CACHE_FNAME):
         print('Cache found, loading examples from cache')
-        with open(cache_fname, 'rb') as f:
+        with open(EXAMPLE_CACHE_FNAME, 'rb') as f:
             examples = pickle.load(f)
         print('Loaded {} examples from cache'.format(len(examples)))
     else:
         print('No cache found, generating examples. May take a while...')
         examples = generate_examples(19)
-        with open(cache_fname, 'wb') as f:
+        with open(EXAMPLE_CACHE_FNAME, 'wb') as f:
             pickle.dump(examples, f)
         print('Generated {} examples and saved in cache'.format(len(examples)))
 
@@ -254,10 +259,13 @@ def generate_or_load_dataset() -> tuple:
     examples_test  = examples[:num_test]
     
     # Shape the data
-    labels_train = [float(d) / 7.0 for d, s in examples_train]
-    labels_test  = [float(d) / 7.0 for d, s in examples_test ]
-    images_train = [state_to_image(s) for d, s in examples_train]
-    images_test  = [state_to_image(s) for d, s in examples_test]
+    labels_train = np.asarray([float(d) / 7.0 for d, s in examples_train])
+    labels_test  = np.asarray([float(d) / 7.0 for d, s in examples_test ])
+    images_train = np.asarray([state_to_image(s) for d, s in examples_train])
+    images_test  = np.asarray([state_to_image(s) for d, s in examples_test])
+
+    labels_train = labels_train.reshape((-1, 1))
+    labels_test  = labels_test.reshape((-1, 1))
 
     return (images_train, labels_train, images_test, labels_test)
 
@@ -268,7 +276,7 @@ def train_or_load_model(args):
     learning_rate = float(args.learning_rate)
     dropout_rate  = float(args.dropout_rate)
     epochs        = int(args.epochs)
-    model_fname = 'model_checkpoints/{}'.format(model_name)
+    model_fname = os.path.join(MODEL_CHECKPOINT_DIR, model_name)
     if os.path.exists(model_fname + '.index'):
         print('Found saved model -- loading it')
         # load model
