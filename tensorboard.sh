@@ -10,4 +10,4 @@ sudo docker run \
     tensorflow/tensorflow:2.1.0-gpu-py3 \
     tensorboard \
         --bind_all \
-        --logdir test_logs
+        --logdir logs
