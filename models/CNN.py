@@ -65,8 +65,8 @@ class ResidNet(tfk.Model):
         self.fc   = tfk.layers.Dense(256, activation=tf.nn.relu)
         self.b1   = ResidBlock(256)
         self.b2   = ResidBlock(256)
-        #self.b3   = ResidBlock(256)
-        #self.b4   = ResidBlock(256)
+        self.b3   = ResidBlock(256)
+        self.b4   = ResidBlock(256)
         self.drop = tfk.layers.Dropout(rate=dropout_rate)
         self.out = tfk.layers.Dense(1)
 
@@ -74,10 +74,10 @@ class ResidNet(tfk.Model):
     def call(self, x, training=False):
         x = self.fc(x)
         x = self.b1(x)
-        x = self.drop(x, training=training)
         x = self.b2(x)
-        #x = self.b3(x)
-        #x = self.b4(x)
+        x = self.drop(x, training=training)
+        x = self.b3(x)
+        x = self.b4(x)
         x = self.out(x)
         return x
 

@@ -25,29 +25,29 @@ doc_run() {
 }
 
 doc_run \
-    --model-name res3-200-0005-50 \
-    --epochs 150 \
+    --model-name res4-256-0005-00 \
+    --epochs 200 \
     --learning-rate 0.0005 \
-    --dropout-rate 0.50 \
-    --batch-size 200
+    --dropout-rate 0.00 \
+    --batch-size 256
 
 doc_run \
-    --model-name res3-200-0005-10 \
-    --epochs 150 \
+    --model-name res4-512-0005-00 \
+    --epochs 200 \
+    --learning-rate 0.0005 \
+    --dropout-rate 0.00 \
+    --batch-size 512
+
+doc_run \
+    --model-name res4-256-0005-10 \
+    --epochs 200 \
     --learning-rate 0.0005 \
     --dropout-rate 0.10 \
-    --batch-size 200
+    --batch-size 256
 
 doc_run \
-    --model-name res3-100-0005-50 \
-    --epochs 150 \
-    --learning-rate 0.0005 \
-    --dropout-rate 0.50 \
-    --batch-size 100
-
-doc_run \
-    --model-name res3-100-0005-10 \
-    --epochs 150 \
+    --model-name res4-512-0005-10 \
+    --epochs 200 \
     --learning-rate 0.0005 \
     --dropout-rate 0.10 \
-    --batch-size 100
+    --batch-size 512
