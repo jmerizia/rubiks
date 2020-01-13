@@ -107,20 +107,36 @@ class Graph:
         parent = dict()
         vis.add(hash(start))
         heappush(PQ, (0, start))
+        MAX_BEAM_WIDTH = 10000
+        WEIGHTING_FACTOR = 0.1
         while PQ:
-            priority, cur_state = heappop(PQ)
-            next_actions = self.get_next_actions(cur_state)
+            nodes = []
+            next_actions = []
+            # Note: this fills 'nodes' with duplicates
+            for _ in range(MAX_BEAM_WIDTH):
+                if not PQ:
+                    break
+                node = heappop(PQ)
+                cur_priority, cur_state = node
+                for action in self.get_next_actions(cur_state):
+                    nodes.append(node)
+                    next_actions.append(action)
+
             # Pre-compute all of the heuristic values.
             # Note: heuristic() should be implemented in parallel for good performance.
-            heuristics = self.heuristic(
-                    [cur_state.apply_action(a) for a in next_actions],
-                    target)
+            query = []
+            for idx, action in enumerate(next_actions):
+                cur_priority, cur_state = nodes[idx]
+                query.append(cur_state.apply_action(action))
 
-            for action, heuristic in zip(next_actions, heuristics):
-                # TODO: We may want to prune these next actions
-                #       to a fixed quantity.
-                #       We probably shouldn't consider every
-                #       next step, just the top most probable ones.
+            print('calculating heuristics')
+            heuristics = self.heuristic(query, target)
+            print('done calculating heuristics')
+
+            for idx, (action, heuristic) in enumerate(zip(next_actions, heuristics)):
+                # Get the node this action refers to
+                # (will get the same node multiple times in a row)
+                cur_priority, cur_state = nodes[idx]
                 state = cur_state.apply_action(action)
                 state_hash = hash(state)
                 if state == target:
@@ -130,10 +146,12 @@ class Graph:
                 if state_hash not in vis:
                     parent[state_hash] = (cur_state, action)
                     vis.add(state_hash)
-                    new_priority = priority + 1 + heuristic
+                    # h(x) = WEIGHTING_FACTOR * g(x) + f(x)
+                    new_priority = WEIGHTING_FACTOR + cur_priority + heuristic
                     heappush(PQ, (new_priority, state))
                 if len(vis) % 200 == 0:
                     print('Checked {} states'.format(len(vis)))
+                    print('Heuristics', len(heuristics))
 
         # In practice, this line should never be run,
         # since the search space will be very large.

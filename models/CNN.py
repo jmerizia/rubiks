@@ -69,7 +69,7 @@ class ResidNet(tfk.Model):
         self.b4   = ResidBlock(256)
         self.out = tfk.layers.Dense(1)
 
-    @tf.function
+    @tf.function(experimental_relax_shapes=True)
     def call(self, x, training=False):
         x = self.fc(x)
         x = self.b1(x)
@@ -115,7 +115,7 @@ class CNN:
     @tf.function
     def get_acc(self, y_pred, y_true):
         diff = tf.math.abs(y_pred - y_true)
-        correct = tf.less(diff, 0.14)
+        correct = tf.less(diff, 0.05)
         return tf.reduce_mean(tf.cast(correct, tf.float32))
 
     def train(self, train_x, train_y, test_x, test_y):

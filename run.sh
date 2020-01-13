@@ -14,7 +14,7 @@ doc_run() {
     #       host machine, so later runs are faster.
     sudo docker run \
         -u $(id -u):$(id -g) \
-        -d \
+        -it \
         --gpus all \
         -v /home/qt/.nv:/.nv \
         -v /home/qt/git/rubiks:/repo \
@@ -25,22 +25,22 @@ doc_run() {
 }
 
 doc_run \
-    --model-name res1-128-0001-00 \
-    --epochs 100 \
-    --learning-rate 0.0001 \
+    --model-name res1-128-0002-00 \
+    --epochs 200 \
+    --learning-rate 0.0002 \
     --dropout-rate 0.00 \
     --batch-size 128
 
 #doc_run \
-#    --model-name res1-128-0001-00 \
+#    --model-name res1-128-0004-00 \
 #    --epochs 200 \
-#    --learning-rate 0.0001 \
+#    --learning-rate 0.0004 \
 #    --dropout-rate 0.00 \
 #    --batch-size 128
 #
 #doc_run \
-#    --model-name res1-128-0001-00 \
+#    --model-name res1-128-0008-00 \
 #    --epochs 200 \
-#    --learning-rate 0.0001 \
+#    --learning-rate 0.0008 \
 #    --dropout-rate 0.00 \
 #    --batch-size 128

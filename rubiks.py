@@ -16,6 +16,8 @@ MODEL_CHECKPOINT_DIR = os.path.join(
         os.path.dirname(__file__), 
         'model_checkpoints/')
 
+MAX_SCRAMBLE_LENGTH = 19
+
 RUBIKS_PERMS = {
     'F': {
         10: 12, 12: 18, 18: 16, 16: 10,
@@ -189,7 +191,7 @@ def generate_examples_helper(k: int) -> list:
     # increase, as the number of steps away increases.
     # This number can be tweaked to give more,
     # or fewer scrambles.
-    num_scrambles = 50*k*k + 50
+    num_scrambles = 5000 #50*k*k + 50
     return [(k, random_scramble(k)) for _ in range(num_scrambles)]
 
 def generate_examples(k: int) -> list:
@@ -208,23 +210,24 @@ def generate_examples(k: int) -> list:
 
 def state_to_image(state: RubiksState):
     # Just a neat trick:
-    t = [0] + [RUBIKS_COLORS[k] / 7.0 for k in state.perm]
+    #t = [0] + [RUBIKS_COLORS[k] / 7.0 for k in state.perm]
     # TODO: Experiment with different arrangements of these "pixels"
-    return np.array(
-        [t[ 1], t[ 2], t[ 3], t[ 4], t[ 5], t[ 6], t[ 7], t[ 8], t[ 9], t[ 1], t[ 2], t[ 3],
-         t[10], t[11], t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[10], t[11], t[12],
-         t[19], t[20], t[21], t[22], t[23], t[24], t[25], t[26], t[27], t[19], t[20], t[21],
-         t[28], t[29], t[30], t[31], t[32], t[33], t[34], t[35], t[36], t[28], t[29], t[30],
-         t[37], t[38], t[39], t[40], t[41], t[42], t[43], t[44], t[45], t[37], t[38], t[39],
-         t[46], t[47], t[48], t[49], t[50], t[51], t[52], t[53], t[54], t[46], t[47], t[48],
-        # Just double the image:
-         t[ 1], t[ 2], t[ 3], t[ 4], t[ 5], t[ 6], t[ 7], t[ 8], t[ 9], t[ 1], t[ 2], t[ 3],
-         t[10], t[11], t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[10], t[11], t[12],
-         t[19], t[20], t[21], t[22], t[23], t[24], t[25], t[26], t[27], t[19], t[20], t[21],
-         t[28], t[29], t[30], t[31], t[32], t[33], t[34], t[35], t[36], t[28], t[29], t[30],
-         t[37], t[38], t[39], t[40], t[41], t[42], t[43], t[44], t[45], t[37], t[38], t[39],
-         t[46], t[47], t[48], t[49], t[50], t[51], t[52], t[53], t[54], t[46], t[47], t[48]]
-    )
+    return [RUBIKS_COLORS[k] / 7.0 for k in state.perm]
+    #return np.array(
+    #    [t[ 1], t[ 2], t[ 3], t[ 4], t[ 5], t[ 6], t[ 7], t[ 8], t[ 9], t[ 1], t[ 2], t[ 3],
+    #     t[10], t[11], t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[10], t[11], t[12],
+    #     t[19], t[20], t[21], t[22], t[23], t[24], t[25], t[26], t[27], t[19], t[20], t[21],
+    #     t[28], t[29], t[30], t[31], t[32], t[33], t[34], t[35], t[36], t[28], t[29], t[30],
+    #     t[37], t[38], t[39], t[40], t[41], t[42], t[43], t[44], t[45], t[37], t[38], t[39],
+    #     t[46], t[47], t[48], t[49], t[50], t[51], t[52], t[53], t[54], t[46], t[47], t[48],
+    #    # Just double the image:
+    #     t[ 1], t[ 2], t[ 3], t[ 4], t[ 5], t[ 6], t[ 7], t[ 8], t[ 9], t[ 1], t[ 2], t[ 3],
+    #     t[10], t[11], t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[10], t[11], t[12],
+    #     t[19], t[20], t[21], t[22], t[23], t[24], t[25], t[26], t[27], t[19], t[20], t[21],
+    #     t[28], t[29], t[30], t[31], t[32], t[33], t[34], t[35], t[36], t[28], t[29], t[30],
+    #     t[37], t[38], t[39], t[40], t[41], t[42], t[43], t[44], t[45], t[37], t[38], t[39],
+    #     t[46], t[47], t[48], t[49], t[50], t[51], t[52], t[53], t[54], t[46], t[47], t[48]]
+    #)
 
 def generate_or_load_dataset() -> tuple:
     """
@@ -238,7 +241,6 @@ def generate_or_load_dataset() -> tuple:
         3. test labels
     """
 
-    MAX_LENGTH = 19
 
     if os.path.exists(EXAMPLE_CACHE_FNAME):
         print('Cache found, loading examples from cache')
@@ -247,7 +249,7 @@ def generate_or_load_dataset() -> tuple:
         print('Loaded {} examples from cache'.format(len(examples)))
     else:
         print('No cache found, generating examples. May take a while...')
-        examples = generate_examples(MAX_LENGTH)
+        examples = generate_examples(MAX_SCRAMBLE_LENGTH)
         with open(EXAMPLE_CACHE_FNAME, 'wb') as f:
             pickle.dump(examples, f)
         print('Generated {} examples and saved in cache'.format(len(examples)))
@@ -261,8 +263,8 @@ def generate_or_load_dataset() -> tuple:
     examples_test  = examples[:num_test]
     
     # Shape the data
-    labels_train = np.asarray([float(d) / (MAX_LENGTH + 1) for d, s in examples_train])
-    labels_test  = np.asarray([float(d) / (MAX_LENGTH + 1) for d, s in examples_test ])
+    labels_train = np.asarray([float(d) / (MAX_SCRAMBLE_LENGTH + 1) for d, s in examples_train])
+    labels_test  = np.asarray([float(d) / (MAX_SCRAMBLE_LENGTH + 1) for d, s in examples_test ])
     images_train = np.asarray([state_to_image(s) for d, s in examples_train])
     images_test  = np.asarray([state_to_image(s) for d, s in examples_test])
 
@@ -329,8 +331,14 @@ class RubiksGraph(Graph):
         # This does everything in a single batch on the GPU.
         # We must be careful if this batch gets too large.
         # (i.e., when number of next states can't fit in GPU memory)
-        tensor = self.model.predict(list(map(state_to_image, states))) * 7
-        return [result.numpy()[0] for result in tensor]
+        print('to array...')
+        arr = np.asarray([state_to_image(s) for s in states])
+        print('feed forward...')
+        tensor = self.model.predict(arr)
+        print('extract result...')
+        result = tensor.numpy() * (MAX_SCRAMBLE_LENGTH + 1)
+        print('pull out of numpy...')
+        return [value[0] for value in result]
         #return [0 for _ in states]
 
 
@@ -347,18 +355,40 @@ parser.add_argument('--dropout-rate', dest='dropout_rate',
         required=True, help='Dropout rate for training')
 args = parser.parse_args()
 
+#graph  = RubiksGraph(args)
+#target = RubiksState()
+#scr1 = RubiksState()
+#scr2 = RubiksState()
+#scr3 = RubiksState()
+#scr4 = RubiksState()
+#for a in 'F* R* U* B* D* B* R* D*'.split():
+#    scr1 = scr1.apply_action(RubiksAction(a))
+#for a in 'F* R* U* B*'.split():
+#    scr2 = scr2.apply_action(RubiksAction(a))
+#for a in 'F*'.split():
+#    scr3 = scr3.apply_action(RubiksAction(a))
+#for a in 'F* R* U* B* D* B2 D2'.split():
+#    scr4 = scr4.apply_action(RubiksAction(a))
+#for a in 'F R U B'.split():
+#    scr4 = scr4.apply_action(RubiksAction(a))
+#
+#print(graph.heuristic([scr1, scr2, scr3, scr4], target))
+#quit()
+
+print('Building graph')
 graph  = RubiksGraph(args)
-quit()
 # Target is the solved state
 target = RubiksState()
 # Start at some scrambled state:
 scramble = 'F* R* U* B* D* B* R* D*'.split()
-scramble = 'F* R* U* B*'.split()
-scramble = 'F* R* U* B* D* B2 D2'.split()
+#scramble = 'F* R* U* B*'.split()
+#scramble = 'F'.split()
+#scramble = 'F* R* U* B* D* B2 D2'.split()
 start = RubiksState()
 for action in scramble:
     start = start.apply_action(RubiksAction(action))
 
+print('Starting search')
 path = graph.connected(start, target)
 if path is None:
     print('No path')
