@@ -238,6 +238,8 @@ def generate_or_load_dataset() -> tuple:
         3. test labels
     """
 
+    MAX_LENGTH = 19
+
     if os.path.exists(EXAMPLE_CACHE_FNAME):
         print('Cache found, loading examples from cache')
         with open(EXAMPLE_CACHE_FNAME, 'rb') as f:
@@ -245,7 +247,7 @@ def generate_or_load_dataset() -> tuple:
         print('Loaded {} examples from cache'.format(len(examples)))
     else:
         print('No cache found, generating examples. May take a while...')
-        examples = generate_examples(19)
+        examples = generate_examples(MAX_LENGTH)
         with open(EXAMPLE_CACHE_FNAME, 'wb') as f:
             pickle.dump(examples, f)
         print('Generated {} examples and saved in cache'.format(len(examples)))
@@ -259,8 +261,8 @@ def generate_or_load_dataset() -> tuple:
     examples_test  = examples[:num_test]
     
     # Shape the data
-    labels_train = np.asarray([float(d) / 7.0 for d, s in examples_train])
-    labels_test  = np.asarray([float(d) / 7.0 for d, s in examples_test ])
+    labels_train = np.asarray([float(d) / (MAX_LENGTH + 1) for d, s in examples_train])
+    labels_test  = np.asarray([float(d) / (MAX_LENGTH + 1) for d, s in examples_test ])
     images_train = np.asarray([state_to_image(s) for d, s in examples_train])
     images_test  = np.asarray([state_to_image(s) for d, s in examples_test])
 
