@@ -1,5 +1,6 @@
-from heapq import heappush, heappop, heapify
 from abc import ABC, abstractmethod
+from helpers import PriorityQueue
+import time
 
 
 class Action(ABC):
@@ -84,12 +85,12 @@ class Graph:
         path = []
         cur = target
         while cur != start:
-            cur, action = tree[hash(cur)]
+            cur, action = tree[cur]
             path.append((cur, action))
         return list(reversed(path))
 
 
-    def connected(self, start: State, target: State, timeout=0) -> list:
+    def connected(self, start: State, target: State) -> list:
         """
         Performs a search over the graph to determine if
             two vertices (start and target) are connected.
@@ -101,59 +102,92 @@ class Graph:
         If timeout is 0, then function will not terminate
             until the result is found, possibly running indefinitely.
         """
-        # TODO: Use timeout
-        vis = set()
-        PQ = []
+        # set of nodes:
+        OPEN, CLOSED = set(), set()
+        # priority queue of nodes:
+        Q = PriorityQueue()
+        # map from node to (node, action)
         parent = dict()
-        vis.add(hash(start))
-        heappush(PQ, (0, start))
+        # map from node -> float:
+        g, h = dict(), dict() 
+
+        # Initialize
+        OPEN.add(start)
+        Q.add(value=start, priority=0)
         MAX_BEAM_WIDTH = 10000
         WEIGHTING_FACTOR = 0.1
-        while PQ:
-            nodes = []
-            next_actions = []
-            # Note: this fills 'nodes' with duplicates
-            for _ in range(MAX_BEAM_WIDTH):
-                if not PQ:
-                    break
-                node = heappop(PQ)
-                cur_priority, cur_state = node
-                for action in self.get_next_actions(cur_state):
-                    nodes.append(node)
-                    next_actions.append(action)
+        g[start] = 0
+        h[start] = 0
 
-            # Pre-compute all of the heuristic values.
-            # Note: heuristic() should be implemented in parallel for good performance.
-            query = []
-            for idx, action in enumerate(next_actions):
-                cur_priority, cur_state = nodes[idx]
-                query.append(cur_state.apply_action(action))
+        while not Q.empty():
 
-            print('calculating heuristics')
-            heuristics = self.heuristic(query, target)
-            print('done calculating heuristics')
+            # new set of nodes whose heuristic values must be calculated as a batch
+            NEW = []
 
-            for idx, (action, heuristic) in enumerate(zip(next_actions, heuristics)):
-                # Get the node this action refers to
-                # (will get the same node multiple times in a row)
-                cur_priority, cur_state = nodes[idx]
-                state = cur_state.apply_action(action)
-                state_hash = hash(state)
-                if state == target:
-                    parent[state_hash] = (cur_state, action)
-                    print('Found path after searching {} states'.format(len(vis) + 1))
+            # Get the top N nodes in OPEN with lowest f
+            nodes = Q.popn(MAX_BEAM_WIDTH)
+            print('OPEN:', len(OPEN), 'CLOSED:', len(CLOSED))
+            print('Expanding {} nodes...'.format(len(nodes)))
+            st = time.time()
+
+            # Process this 'beam' of nodes
+            for u, priority in nodes:
+                hash_u = hash(u)
+
+                # If we reached the target node
+                if u == target:
                     return self.get_path(parent, start, target)
-                if state_hash not in vis:
-                    parent[state_hash] = (cur_state, action)
-                    vis.add(state_hash)
-                    # h(x) = WEIGHTING_FACTOR * g(x) + f(x)
-                    new_priority = WEIGHTING_FACTOR + cur_priority + heuristic
-                    heappush(PQ, (new_priority, state))
-                if len(vis) % 200 == 0:
-                    print('Checked {} states'.format(len(vis)))
-                    print('Heuristics', len(heuristics))
 
-        # In practice, this line should never be run,
-        # since the search space will be very large.
-        # I leave it here for correctness.
+                # Consider all next nodes
+                for a in self.get_next_actions(u):
+                    v = u.apply_action(a)
+                    hash_v = hash(v)
+
+                    # If v is neither closed nor open
+                    if v not in CLOSED and v not in OPEN:
+
+                        # Open v and update it's cost and parent
+                        OPEN.add(v)
+                        NEW.append(v)
+                        g[v] = g[u] + 1
+                        parent[v] = (u, a)
+
+                    # Else, if the current cost of getting to v
+                    # is larger than going from u to v
+                    elif g[v] > g[u] + 1:
+
+                        # Update the cost and parent of v
+                        g[v] = g[u] + 1
+                        parent[v] = (u, a)
+
+                        # If v closed, and hence not open
+                        if v in CLOSED:
+
+                            # Re-open v, and heuristic must be recalculated
+                            CLOSED.remove(v)
+                            OPEN.add(v)
+                            NEW.append(v)
+
+                # Finished exploring children of u,
+                # so now close u
+                OPEN.remove(u)
+                CLOSED.add(u)
+
+            en = time.time()
+            print('finished expanding', en - st)
+
+            st = time.time()
+            # Calculate and update heuristics in a batch
+            print('Calculating heuristic...')
+            h = self.heuristic(NEW, target)
+            for idx, v in enumerate(NEW):
+                hash_v = hash(v)
+                priority = WEIGHTING_FACTOR * g[v] + h[idx]
+                # Note: v might already be in the priority queue,
+                #       since we may have re-opened it.
+                #       Thus, PriorityQueue must support updating weights.
+                Q.add(value=v, priority=priority)
+            en = time.time()
+            print('finished heuristics', en - st)
+
         return None

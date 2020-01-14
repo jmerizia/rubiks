@@ -8,6 +8,11 @@ from multiprocessing import Pool
 from models.CNN import CNN
 import argparse
 
+# "safe mode" can be enabled here if there's a bug or
+# something. It enables several checks for correctness,
+# but it also slows down the graph search.
+SAFE_MODE = False
+
 EXAMPLE_CACHE_FNAME = os.path.join(
         os.path.dirname(__file__), 
         'cache_files/rubiks_cache.in')
@@ -123,8 +128,9 @@ class RubiksAction(Action):
         return (mult, perm)
 
     def __init__(self, name):
-        if name not in RUBIKS_ACTIONS:
-            raise ValueError('RubiksAction.__init__ :: Invalid name {}'.format(name))
+        if SAFE_MODE:
+            if name not in RUBIKS_ACTIONS:
+                raise ValueError('RubiksAction.__init__ :: Invalid name {}'.format(name))
         self.name = name
         self.mult, self.perm = self.get_perm(name)
 
@@ -143,8 +149,10 @@ class RubiksState(State):
 
     def __init__(self, perm: tuple = tuple(range(1, 6*9+1))):
         # defaults to the solved state
-        if tuple(sorted(perm)) != tuple(range(1, 6*9+1)):
-            raise ValueError('RubiksState.__init__ :: Invalid permutation {}'.format(perm))
+        if SAFE_MODE:
+            if tuple(sorted(perm)) != tuple(range(1, 6*9+1)):
+                raise ValueError('RubiksState.__init__ :: Invalid permutation {}'.format(perm))
+
         self.perm = perm
 
     def __hash__(self):
@@ -163,9 +171,11 @@ class RubiksState(State):
         return str(self.perm)
 
     def apply_action(self, a: RubiksAction) -> 'RubiksState':
-        if type(a) != RubiksAction:
-            raise ValueError('RubiksState.apply_action :: bad action type {}'.format(
-                type(a)))
+        if SAFE_MODE:
+            if type(a) != RubiksAction:
+                raise ValueError('RubiksState.apply_action :: bad action type {}'.format(
+                    type(a)))
+
         cur_perm = self.perm
         for _ in range(a.mult):
             new_perm = list(range(1, 6*9+1))
@@ -331,13 +341,9 @@ class RubiksGraph(Graph):
         # This does everything in a single batch on the GPU.
         # We must be careful if this batch gets too large.
         # (i.e., when number of next states can't fit in GPU memory)
-        print('to array...')
         arr = np.asarray([state_to_image(s) for s in states])
-        print('feed forward...')
         tensor = self.model.predict(arr)
-        print('extract result...')
         result = tensor.numpy() * (MAX_SCRAMBLE_LENGTH + 1)
-        print('pull out of numpy...')
         return [value[0] for value in result]
         #return [0 for _ in states]
 
@@ -380,16 +386,21 @@ graph  = RubiksGraph(args)
 # Target is the solved state
 target = RubiksState()
 # Start at some scrambled state:
-scramble = 'F* R* U* B* D* B* R* D*'.split()
+#scramble = 'F* R* U* B* D* B* R* D*'.split()
 #scramble = 'F* R* U* B*'.split()
 #scramble = 'F'.split()
-#scramble = 'F* R* U* B* D* B2 D2'.split()
+scramble = 'F* R* U* B* D* B2 D2'.split()
 start = RubiksState()
 for action in scramble:
     start = start.apply_action(RubiksAction(action))
 
 print('Starting search')
-path = graph.connected(start, target)
+import cProfile
+st = time.time()
+cProfile.run('graph.connected(start, target)', 'stats')
+en = time.time()
+print('time:', en - st)
+quit()
 if path is None:
     print('No path')
 elif path == []:
