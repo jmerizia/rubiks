@@ -184,6 +184,11 @@ class RubiksState(State):
             cur_perm = new_perm
         return RubiksState(tuple(cur_perm))
 
+    def get_next_actions(self) -> list:
+        actions = [RubiksAction(a) for a in RUBIKS_ACTIONS]
+        random.shuffle(actions)
+        return actions
+
 
 def random_scramble(k: int) -> RubiksState:
     """
@@ -332,11 +337,6 @@ class RubiksGraph(Graph):
     def __init__(self, args):
         self.model = train_or_load_model(args)
 
-    def get_next_actions(self, s: RubiksState) -> list:
-        actions = [RubiksAction(a) for a in RUBIKS_ACTIONS]
-        random.shuffle(actions)
-        return actions
-
     def heuristic(self, states: list, target: State) -> list:
         # This does everything in a single batch on the GPU.
         # We must be careful if this batch gets too large.
@@ -389,18 +389,25 @@ target = RubiksState()
 #scramble = 'F* R* U* B* D* B* R* D*'.split()
 #scramble = 'F* R* U* B*'.split()
 #scramble = 'F'.split()
-scramble = 'F* R* U* B* D* B2 D2'.split()
+scramble = 'F* R* U* B* D* B2 D2 U* B'.split()
 start = RubiksState()
 for action in scramble:
     start = start.apply_action(RubiksAction(action))
 
 print('Starting search')
-import cProfile
+
+#import cProfile
+#st = time.time()
+#cProfile.run('graph.connected(start, target)', 'stats')
+#en = time.time()
+#print('time:', en - st)
+#quit()
+
 st = time.time()
-cProfile.run('graph.connected(start, target)', 'stats')
+path = graph.connected(start, target)
 en = time.time()
 print('time:', en - st)
-quit()
+
 if path is None:
     print('No path')
 elif path == []:
