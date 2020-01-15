@@ -25,22 +25,8 @@ doc_run() {
 }
 
 doc_run \
-    --model-name res1-128-0002-00 \
-    --epochs 200 \
+    --model-name res2-1000-0002-00 \
+    --epochs 120 \
     --learning-rate 0.0002 \
     --dropout-rate 0.00 \
-    --batch-size 128
-
-#doc_run \
-#    --model-name res1-128-0004-00 \
-#    --epochs 200 \
-#    --learning-rate 0.0004 \
-#    --dropout-rate 0.00 \
-#    --batch-size 128
-#
-#doc_run \
-#    --model-name res1-128-0008-00 \
-#    --epochs 200 \
-#    --learning-rate 0.0008 \
-#    --dropout-rate 0.00 \
-#    --batch-size 128
+    --batch-size 1000

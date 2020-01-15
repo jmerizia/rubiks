@@ -202,12 +202,13 @@ def random_scramble(k: int) -> RubiksState:
     return state
 
 def generate_examples_helper(k: int) -> list:
-    # It makes sense that the number of scrambles must
-    # increase, as the number of steps away increases.
-    # This number can be tweaked to give more,
-    # or fewer scrambles.
-    num_scrambles = 5000 #50*k*k + 50
-    return [(k, random_scramble(k)) for _ in range(num_scrambles)]
+    num_scrambles = 50000
+    res = []
+    for _ in range(num_scrambles):
+        res.append( (k, random_scramble(k)) )
+        if len(res) % 5000 == 0:
+            print(len(res))
+    return res
 
 def generate_examples(k: int) -> list:
     """
@@ -271,8 +272,8 @@ def generate_or_load_dataset() -> tuple:
 
     print('Splitting and shaping the examples')
     # Split the data
-    num_train = int(len(examples)*0.80)
-    num_test  = int(len(examples)*0.20)
+    num_train = int(len(examples)*0.95)
+    num_test  = int(len(examples)*0.05)
     random.shuffle(examples)
     examples_train = examples[:num_train]
     examples_test  = examples[:num_test]
@@ -389,9 +390,9 @@ target = RubiksState()
 #scramble = 'F* R* U* B* D* B* R* D*'.split()
 #scramble = 'F* R* U* B*'.split()
 #scramble = 'F'.split()
-scramble = 'F* R* U* B* D* B2 D2 U* B'.split()
+scramble = 'F* R* U* B* D* B2 D2 U* B R D'
 start = RubiksState()
-for action in scramble:
+for action in scramble.split():
     start = start.apply_action(RubiksAction(action))
 
 print('Starting search')
@@ -407,6 +408,8 @@ st = time.time()
 path = graph.connected(start, target)
 en = time.time()
 print('time:', en - st)
+
+print('Scramble:', scramble)
 
 if path is None:
     print('No path')

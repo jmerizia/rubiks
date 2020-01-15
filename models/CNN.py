@@ -23,10 +23,10 @@ for device in tf.config.experimental.list_physical_devices('GPU'):
 
 tf.keras.backend.set_floatx('float32')
 
-class ResidFC(tfk.layers.Layer):
+class ResidBlock(tfk.layers.Layer):
 
     def __init__(self, size):
-        super(ResidFC, self).__init__()
+        super(ResidBlock, self).__init__()
         self.size = size
         self.fc1 = tfk.layers.Dense(size, activation=tf.nn.relu)
         self.fc2 = tfk.layers.Dense(size)
@@ -41,43 +41,29 @@ class ResidFC(tfk.layers.Layer):
         return x
 
 
-class ResidBlock(tfk.layers.Layer):
-
-    def __init__(self, size):
-        super(ResidBlock, self).__init__()
-        self.size = size
-        self.res1 = ResidFC(size)
-        self.res2 = ResidFC(size)
-        self.res3 = ResidFC(size)
-
-    @tf.function
-    def call(self, x):
-        x = self.res1(x)
-        x = self.res2(x)
-        x = self.res3(x)
-        return x
-
-
 class ResidNet(tfk.Model):
 
     def __init__(self, dropout_rate):
         super(ResidNet, self).__init__()
-        self.fc   = tfk.layers.Dense(256, activation=tf.nn.relu)
-        self.b1   = ResidBlock(256)
-        self.b2   = ResidBlock(256)
-        self.b3   = ResidBlock(256)
-        self.b4   = ResidBlock(256)
+        self.fc1 = tfk.layers.Dense(5000, activation=tf.nn.relu)
+        self.fc2 = tfk.layers.Dense(1000, activation=tf.nn.relu)
+        self.b1  = ResidBlock(1000)
+        self.b2  = ResidBlock(1000)
+        self.b3  = ResidBlock(1000)
+        self.b4  = ResidBlock(1000)
         self.out = tfk.layers.Dense(1)
 
     @tf.function(experimental_relax_shapes=True)
     def call(self, x, training=False):
-        x = self.fc(x)
+        x = self.fc1(x)
+        x = self.fc2(x)
         x = self.b1(x)
         x = self.b2(x)
         x = self.b3(x)
         x = self.b4(x)
         x = self.out(x)
         return x
+
 
 class CNN:
 
@@ -97,7 +83,7 @@ class CNN:
             self.display_step  = display_step
             self.learning_rate = learning_rate
             self.epochs        = epochs
-            self.lr_decay      = learning_rate / epochs
+            self.lr_decay      = 0.5 * learning_rate / epochs
             self.optimizer     = tf.optimizers.Adam(
                     learning_rate=self.learning_rate,
                     decay=self.lr_decay

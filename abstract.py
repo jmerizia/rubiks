@@ -3,6 +3,8 @@ from helpers import PriorityQueue
 import time
 from multiprocessing import Pool
 
+VERBOSE = True
+
 def get_next_actions_and_states(states):
     """
     Function wrapper around get_next_actions and apply_action,
@@ -140,7 +142,7 @@ class Graph:
         hash_start = hash(start)
         OPEN.add(hash_start)
         Q.add(value=start, priority=0)
-        MAX_BEAM_WIDTH = 10000
+        MAX_BEAM_WIDTH = 200
         WEIGHTING_FACTOR = 0.1
         g[hash_start] = 0
         h[hash_start] = 0
@@ -149,6 +151,7 @@ class Graph:
         hash_target = hash(target)
         reopen_count = 0
 
+        cnt = 0
         while not Q.empty():
 
             # new set of nodes whose heuristic values must be calculated as a batch
@@ -156,11 +159,12 @@ class Graph:
 
             # Get the top N nodes in OPEN with lowest f
             nodes = Q.popn(MAX_BEAM_WIDTH)
-            print('OPEN:', len(OPEN),
-                  'CLOSED:', len(CLOSED),
-                  'reopen count:', reopen_count,
-                  'total expanded:', len(OPEN) + len(CLOSED))
-            print('Expanding {} nodes...'.format(len(nodes)))
+            if VERBOSE:
+                print('OPEN:', len(OPEN),
+                      'CLOSED:', len(CLOSED),
+                      'reopen count:', reopen_count,
+                      'total expanded:', len(OPEN) + len(CLOSED))
+                print('Expanding {} nodes...'.format(len(nodes)))
             st = time.time()
 
             # We know we will need all of these next states,
@@ -211,8 +215,8 @@ class Graph:
 
                             # Re-open v, and heuristic must be recalculated
                             CLOSED.remove(hash_v)
-                            OPEN.add(v)
-                            NEW.append(hash_v)
+                            OPEN.add(hash_v)
+                            NEW.append(v)
 
                 # Finished exploring children of u,
                 # so now close u
@@ -220,20 +224,28 @@ class Graph:
                 CLOSED.add(hash_u)
 
             en = time.time()
-            print('finished expanding', en - st)
+            if VERBOSE:
+                print('finished expanding', en - st)
 
-            st = time.time()
-            # Calculate and update heuristics in a batch
-            print('Calculating heuristic...')
-            h = self.heuristic(NEW, target)
-            for idx, v in enumerate(NEW):
-                hash_v = hash(v)
-                priority = WEIGHTING_FACTOR * g[hash_v] + h[idx]
-                # Note: v might already be in the priority queue,
-                #       since we may have re-opened it.
-                #       Thus, PriorityQueue must support updating weights.
-                Q.add(value=v, priority=priority)
-            en = time.time()
-            print('finished heuristics', en - st)
+            if len(NEW) > 0:
+
+                # Calculate and update heuristics in a batch
+                if VERBOSE:
+                    print('Calculating heuristic...')
+                st = time.time()
+                h = self.heuristic(NEW, target)
+                for idx, v in enumerate(NEW):
+                    hash_v = hash(v)
+                    priority = WEIGHTING_FACTOR * g[hash_v] + h[idx]
+                    # Note: v might already be in the priority queue,
+                    #       since we may have re-opened it.
+                    #       Thus, PriorityQueue must support updating weights.
+                    Q.add(value=v, priority=priority)
+                en = time.time()
+                if VERBOSE:
+                    print('finished heuristics', en - st)
+            else:
+                if VERBOSE:
+                    print('No new values')
 
         return None
