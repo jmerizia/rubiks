@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from helpers import PriorityQueue
 import time
 from multiprocessing import Pool
+import numpy as np
 
 VERBOSE = True
 
@@ -80,6 +81,11 @@ class State(ABC):
         """
         Returns the next states to this state.
         """
+        pass
+
+    @abstractmethod
+    def to_numpy(self):
+        """Returns a numpy array for training."""
         pass
 
 

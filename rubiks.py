@@ -5,17 +5,12 @@ import pickle
 import time
 import numpy as np
 from multiprocessing import Pool
-from models.CNN import CNN
-import argparse
+import fire
 
 # "safe mode" can be enabled here if there's a bug or
 # something. It enables several checks for correctness,
 # but it also slows down the graph search.
 SAFE_MODE = False
-
-EXAMPLE_CACHE_FNAME = os.path.join(
-        os.path.dirname(__file__), 
-        'cache_files/rubiks_cache.in')
 
 MODEL_CHECKPOINT_DIR = os.path.join(
         os.path.dirname(__file__), 
@@ -165,7 +160,7 @@ class RubiksState(State):
         return self.perm[1] < other.perm[1]
 
     def __str__(self):
-        return str(self.perm)
+        return ' '.join(map(str, self.perm))
 
     def __repr__(self):
         return str(self.perm)
@@ -189,154 +184,15 @@ class RubiksState(State):
         random.shuffle(actions)
         return actions
 
-
-def random_scramble(k: int) -> RubiksState:
-    """
-    Returns a random scramble of distance no greater
-    than k from the solved state.
-    """
-    state = RubiksState()
-    for _ in range(k):
-        action = RubiksAction(random.choice(RUBIKS_ACTIONS))
-        state = state.apply_action(action)
-    return state
-
-def generate_examples_helper(k: int) -> list:
-    num_scrambles = 50000
-    res = []
-    for _ in range(num_scrambles):
-        res.append( (k, random_scramble(k)) )
-        if len(res) % 5000 == 0:
-            print(len(res))
-    return res
-
-def generate_examples(k: int) -> list:
-    """
-    Returns a list of example scrambles
-    for each of the 0 to k possible length
-    scrambles.
-    Each scrambled state is listed in a pair
-    with the associated k value.
-    """
-    p = Pool(20)
-    examples = []
-    for example in p.map(generate_examples_helper, range(k+1)):
-        examples += example
-    return examples
-
-def state_to_image(state: RubiksState):
-    # Just a neat trick:
-    #t = [0] + [RUBIKS_COLORS[k] / 7.0 for k in state.perm]
-    # TODO: Experiment with different arrangements of these "pixels"
-    return [RUBIKS_COLORS[k] / 7.0 for k in state.perm]
-    #return np.array(
-    #    [t[ 1], t[ 2], t[ 3], t[ 4], t[ 5], t[ 6], t[ 7], t[ 8], t[ 9], t[ 1], t[ 2], t[ 3],
-    #     t[10], t[11], t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[10], t[11], t[12],
-    #     t[19], t[20], t[21], t[22], t[23], t[24], t[25], t[26], t[27], t[19], t[20], t[21],
-    #     t[28], t[29], t[30], t[31], t[32], t[33], t[34], t[35], t[36], t[28], t[29], t[30],
-    #     t[37], t[38], t[39], t[40], t[41], t[42], t[43], t[44], t[45], t[37], t[38], t[39],
-    #     t[46], t[47], t[48], t[49], t[50], t[51], t[52], t[53], t[54], t[46], t[47], t[48],
-    #    # Just double the image:
-    #     t[ 1], t[ 2], t[ 3], t[ 4], t[ 5], t[ 6], t[ 7], t[ 8], t[ 9], t[ 1], t[ 2], t[ 3],
-    #     t[10], t[11], t[12], t[13], t[14], t[15], t[16], t[17], t[18], t[10], t[11], t[12],
-    #     t[19], t[20], t[21], t[22], t[23], t[24], t[25], t[26], t[27], t[19], t[20], t[21],
-    #     t[28], t[29], t[30], t[31], t[32], t[33], t[34], t[35], t[36], t[28], t[29], t[30],
-    #     t[37], t[38], t[39], t[40], t[41], t[42], t[43], t[44], t[45], t[37], t[38], t[39],
-    #     t[46], t[47], t[48], t[49], t[50], t[51], t[52], t[53], t[54], t[46], t[47], t[48]]
-    #)
-
-def generate_or_load_dataset() -> tuple:
-    """
-    Generate/load dataset, depending on it a cache_files/rubiks_cache.in
-    file can be found.
-    Returns a tuple of four numpy array of shape (N, width, height, 1).
-    The tuple contains the following:
-        0. train images
-        1. train labels
-        2. test images
-        3. test labels
-    """
-
-
-    if os.path.exists(EXAMPLE_CACHE_FNAME):
-        print('Cache found, loading examples from cache')
-        with open(EXAMPLE_CACHE_FNAME, 'rb') as f:
-            examples = pickle.load(f)
-        print('Loaded {} examples from cache'.format(len(examples)))
-    else:
-        print('No cache found, generating examples. May take a while...')
-        examples = generate_examples(MAX_SCRAMBLE_LENGTH)
-        with open(EXAMPLE_CACHE_FNAME, 'wb') as f:
-            pickle.dump(examples, f)
-        print('Generated {} examples and saved in cache'.format(len(examples)))
-
-    print('Splitting and shaping the examples')
-    # Split the data
-    num_train = int(len(examples)*0.95)
-    num_test  = int(len(examples)*0.05)
-    random.shuffle(examples)
-    examples_train = examples[:num_train]
-    examples_test  = examples[:num_test]
-    
-    # Shape the data
-    labels_train = np.asarray([float(d) / (MAX_SCRAMBLE_LENGTH + 1) for d, s in examples_train])
-    labels_test  = np.asarray([float(d) / (MAX_SCRAMBLE_LENGTH + 1) for d, s in examples_test ])
-    images_train = np.asarray([state_to_image(s) for d, s in examples_train])
-    images_test  = np.asarray([state_to_image(s) for d, s in examples_test])
-
-    labels_train = labels_train.reshape((-1, 1))
-    labels_test  = labels_test.reshape((-1, 1))
-
-    return (images_train, labels_train, images_test, labels_test)
-
-
-def train_or_load_model(args):
-    model_name    = args.model_name
-    batch_size    = int(args.batch_size)
-    learning_rate = float(args.learning_rate)
-    dropout_rate  = float(args.dropout_rate)
-    epochs        = int(args.epochs)
-    model_fname = os.path.join(MODEL_CHECKPOINT_DIR, model_name)
-    if os.path.exists(model_fname + '.index'):
-        print('Found saved model -- loading it')
-        # load model
-        model = CNN(model_fname=model_fname,
-                    model_name=model_name,
-                    batch_size=batch_size,
-                    dropout_rate=dropout_rate,
-                    learning_rate=learning_rate,
-                    epochs=epochs)
-    else:
-        print('No model "{}" found. Training one instead'.format(model_fname))
-        # generate data and train model
-        images_train, labels_train, images_test, labels_test = generate_or_load_dataset()
-        #print('images_train', images_train.shape)
-        #print('labels_train', labels_train.shape)
-        #print('images_test', images_test.shape)
-        #print('labels_test', labels_test.shape)
-        model = CNN(model_name=model_name,
-                    batch_size=batch_size,
-                    dropout_rate=dropout_rate,
-                    learning_rate=learning_rate,
-                    epochs=epochs)
-        st = time.time()
-        model.train(
-            train_x=images_train,
-            train_y=labels_train,
-            test_x=images_test,
-            test_y=labels_test
-        )
-        en = time.time()
-        print("Trained model! elapsed time:", en - st)
-        model.save(model_fname)
-
-    return model
+    def to_numpy(self):
+        return np.array(self.perm)
 
 
 class RubiksGraph(Graph):
 
     def __init__(self, args):
-        self.model = train_or_load_model(args)
+        # TODO: Load model
+        self.model = None
 
     def heuristic(self, states: list, target: State) -> list:
         # This does everything in a single batch on the GPU.
@@ -349,73 +205,4 @@ class RubiksGraph(Graph):
         #return [0 for _ in states]
 
 
-parser = argparse.ArgumentParser(description='Train and solve Rubiks Cubes.')
-parser.add_argument('--model-name', dest='model_name',
-        required=True, help='Name of the model to train')
-parser.add_argument('--epochs', dest='epochs',
-        required=True, help='Number of epochs to train for')
-parser.add_argument('--learning-rate', dest='learning_rate',
-        required=True, help='Learning rate for training')
-parser.add_argument('--batch-size', dest='batch_size',
-        required=True, help='Batch size for training')
-parser.add_argument('--dropout-rate', dest='dropout_rate',
-        required=True, help='Dropout rate for training')
-args = parser.parse_args()
 
-#graph  = RubiksGraph(args)
-#target = RubiksState()
-#scr1 = RubiksState()
-#scr2 = RubiksState()
-#scr3 = RubiksState()
-#scr4 = RubiksState()
-#for a in 'F* R* U* B* D* B* R* D*'.split():
-#    scr1 = scr1.apply_action(RubiksAction(a))
-#for a in 'F* R* U* B*'.split():
-#    scr2 = scr2.apply_action(RubiksAction(a))
-#for a in 'F*'.split():
-#    scr3 = scr3.apply_action(RubiksAction(a))
-#for a in 'F* R* U* B* D* B2 D2'.split():
-#    scr4 = scr4.apply_action(RubiksAction(a))
-#for a in 'F R U B'.split():
-#    scr4 = scr4.apply_action(RubiksAction(a))
-#
-#print(graph.heuristic([scr1, scr2, scr3, scr4], target))
-#quit()
-
-print('Building graph')
-graph  = RubiksGraph(args)
-# Target is the solved state
-target = RubiksState()
-# Start at some scrambled state:
-#scramble = 'F* R* U* B* D* B* R* D*'.split()
-#scramble = 'F* R* U* B*'.split()
-#scramble = 'F'.split()
-scramble = 'F* R* U* B* D* B2 D2 U* B R D'
-start = RubiksState()
-for action in scramble.split():
-    start = start.apply_action(RubiksAction(action))
-
-print('Starting search')
-
-#import cProfile
-#st = time.time()
-#cProfile.run('graph.connected(start, target)', 'stats')
-#en = time.time()
-#print('time:', en - st)
-#quit()
-
-st = time.time()
-path = graph.connected(start, target)
-en = time.time()
-print('time:', en - st)
-
-print('Scramble:', scramble)
-
-if path is None:
-    print('No path')
-elif path == []:
-    if start != target:
-        print('path == [], but expected start == target')
-    print('Already solved (start == target)')
-else:
-    print('Solution:', ' '.join(a.name for s, a in path))
