@@ -9,6 +9,7 @@ import time
 from model import RubiksNetwork
 import numpy as np
 from rubiks import RubiksState, RubiksAction
+from collections import defaultdict
 
 class RubiksDataset:
     def __init__(self, dataset_fname):
@@ -17,8 +18,8 @@ class RubiksDataset:
         with open(dataset_fname) as f:
             self.l = int(f.readline())
             for i in range(self.l):
-                k = int(readline())
-                state = tuple(map(int, readline().split()))
+                k = int(f.readline())
+                state = tuple(map(int, f.readline().split()))
                 state = RubiksState(state)
                 self.states.append(state)
                 self.labels.append(k)
@@ -168,30 +169,22 @@ def davi(device, bs, lr, check, log_step, threshold):
             wandb.log({'loss': loss}, step=m)
 
             print('Performing test...')
-            freq = defaultdict()
-            test_states = [
-                (0, RubiksState()),
-                (1, RubiksState() \
-                    .apply_action(RubiksAction('R')) ),
-                (1, RubiksState() \
-                    .apply_action(RubiksAction('L')) ),
-                (1, RubiksState() \
-                    .apply_action(RubiksAction('L2')) ),
-                (2, RubiksState() \
-                    .apply_action(RubiksAction('R')) \
-                    .apply_action(RubiksAction('D')) ),
-                (2, RubiksState() \
-                    .apply_action(RubiksAction('B')) \
-                    .apply_action(RubiksAction('F2')) ),
-            ]
+            freq = defaultdict(lambda: 0)
+            tota = defaultdict(lambda: 0)
+            uniq = set()
             target = RubiksState()
-            correct = 0
             st = time.time()
-            for idx, (ans, state) in enumerate(test_states):
+            for k, state in zip(test_labels, test_states):
                 x = state.trainable().to(device)
                 y = model(x).item()
-                print(ans, y)
-                wandb.log({'test{}'.format(idx): y}, step=m)
+                if abs(y - k) < 0.3:
+                    freq[k] += 1
+                tota[k] += 1
+                uniq.add(k)
+            for k in uniq:
+                acc = freq[k] / tota[k]
+                wandb.log({'k-{}'.format(k): acc}, step=m)
+                print('acc k-{} {}'.format(k, acc))
                 #res = greedy_search(model, device, state, target, 30)
                 #if res > -1:
                 #    correct += 1
@@ -207,7 +200,6 @@ def entry(lr,
           threshold,
           log_step,
           seed=1,
-          epochs=1,
           cuda=False):
 
     wandb.init(project='rubiks')

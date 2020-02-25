@@ -6,7 +6,7 @@ import random
 from multiprocessing import Pool
 
 DATA_DIR = './data/'
-MAX_SCRAMBLE_LENGTH = 2
+MAX_SCRAMBLE_LENGTH = 5
 
 def generate_states(n):
     """
