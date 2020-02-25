@@ -11,7 +11,7 @@ import torch
 # "safe mode" can be enabled here if there's a bug or
 # something. It enables several checks for correctness,
 # but it also slows down the graph search.
-SAFE_MODE = True
+SAFE_MODE = False
 
 MODEL_CHECKPOINT_DIR = os.path.join(
         os.path.dirname(__file__), 

@@ -6,3 +6,4 @@ venv/
 logs/
 data/
 model-weights.pt
+wandb/

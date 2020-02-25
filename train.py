@@ -10,30 +10,34 @@ from model import RubiksNetwork
 import numpy as np
 from rubiks import RubiksState, RubiksAction
 
-
 class RubiksDataset:
     def __init__(self, dataset_fname):
         self.states = []
+        self.labels = []
         with open(dataset_fname) as f:
             self.l = int(f.readline())
-            for line in f:
-                state = tuple(map(int, line.split()))
+            for i in range(self.l):
+                k = int(readline())
+                state = tuple(map(int, readline().split()))
                 state = RubiksState(state)
                 self.states.append(state)
+                self.labels.append(k)
         self.cur_idx = 0
 
     def __len__(self):
         return self.l
 
     def get_next(self, n):
-        res = []
+        states = []
+        labels = []
         for i in range(n):
-            k = i + self.cur_idx
-            if k >= len(self.states):
+            j = i + self.cur_idx
+            if j >= self.l:
                 break
-            res.append(self.states[k])
-        self.cur_idx += len(res)
-        return res
+            states.append(self.states[j])
+            labels.append(self.labels[j])
+        self.cur_idx += len(states)
+        return labels, states
 
     def empty(self):
         return self.l == self.cur_idx
@@ -43,20 +47,20 @@ def predict(model, device, state):
     """Given a state and model, predict the heuristic."""
 
     if state == RubiksState():
-        ans = torch.zeros([1], dtype=torch.float)
+        ans = torch.zeros([1], dtype=torch.float).to(device)
 
     else:
         possible = []
         for a in state.get_next_actions():
             x = state.apply_action(a)
             if x == RubiksState():
-                y = torch.zeros([1], dtype=torch.float)
+                y = 1 + torch.zeros([1], dtype=torch.float).to(device)
             else:
                 x = x.trainable().to(device)
                 y = 1 + model(x)
             possible.append(y)
         possible = torch.stack(possible, 0)
-        ans = torch.min(possible, 0)[0]
+        ans, ind = torch.min(possible, 0)
 
     return ans
 
@@ -86,13 +90,19 @@ def greedy_search(model, device, start, target, depth):
     return -1
 
 
-def davi(device, bs, lr, check, test_step, threshold, state_dict=None):
-    dataset = RubiksDataset('./data/dataset.txt')
+def davi(device, bs, lr, check, log_step, threshold):
+    print('Running DAVI')
+    st = time.time()
+    dataset_train = RubiksDataset('./data/train.txt')
+    dataset_test = RubiksDataset('./data/test.txt')
+    test_labels, test_states = dataset_test.get_next(1000)
+    en = time.time()
+    print('Loaded dataset in {:0.4f} seconds'.format(en-st))
     mseloss = nn.MSELoss()
-    theta = state_dict
-    theta_e = state_dict
+    theta = None
+    theta_e = None
     m = 1
-    while not dataset.empty():
+    while not dataset_train.empty():
 
         # initialize model parameters:
         st = time.time()
@@ -108,7 +118,7 @@ def davi(device, bs, lr, check, test_step, threshold, state_dict=None):
         optimizer = optim.Adadelta(model.parameters(), lr=lr)
 
         # load batch:
-        states = dataset.get_next(bs)
+        labels, states = dataset_train.get_next(bs)
 
         en = time.time()
         setup_time = en-st
@@ -144,71 +154,49 @@ def davi(device, bs, lr, check, test_step, threshold, state_dict=None):
         # update weights:
         theta = model.state_dict()
         if m % check == 0:
-            print('batch {}: loss = {}'.format(m, loss))
-            print('setup_time = {:0.4f}, pred_time = {:0.4f}, train_time = {:0.4f}' \
-                    .format(setup_time, pred_time, train_time))
             if loss < threshold:
                 print('updating!')
                 theta_e = model.state_dict()
+                wandb.log({'update': 1}, step=m)
+            else:
+                wandb.log({'update': 0}, step=m)
 
-                print('Performing test...')
-                test_states = [
-                    (0, RubiksState()),
-                    (1, RubiksState() \
-                        .apply_action(RubiksAction('R')) ),
-                    (1, RubiksState() \
-                        .apply_action(RubiksAction('L')) ),
-                    (1, RubiksState() \
-                        .apply_action(RubiksAction('L2')) ),
-                    (2, RubiksState() \
-                        .apply_action(RubiksAction('R')) \
-                        .apply_action(RubiksAction('D')) ),
-                    (2, RubiksState() \
-                        .apply_action(RubiksAction('B')) \
-                        .apply_action(RubiksAction('F2')) ),
-                    (3, RubiksState() \
-                        .apply_action(RubiksAction('B')) \
-                        .apply_action(RubiksAction('F2')) \
-                        .apply_action(RubiksAction('D')) ),
-                    (3, RubiksState() \
-                        .apply_action(RubiksAction('B')) \
-                        .apply_action(RubiksAction('D')) \
-                        .apply_action(RubiksAction('R')) ),
-                    (3, RubiksState() \
-                        .apply_action(RubiksAction('D')) \
-                        .apply_action(RubiksAction('R2')) \
-                        .apply_action(RubiksAction('F*')) )
-                    #RubiksState().apply_action(RubiksAction('D')),
-                    #RubiksState().apply_action(RubiksAction('U')),
-                    #RubiksState().apply_action(RubiksAction('F')),
-                    #RubiksState().apply_action(RubiksAction('B')),
-                    #RubiksState().apply_action(RubiksAction('L')),
-                    #RubiksState().apply_action(RubiksAction('R')),
-                    #RubiksState().apply_action(RubiksAction('D*')),
-                    #RubiksState().apply_action(RubiksAction('U*')),
-                    #RubiksState().apply_action(RubiksAction('F*')),
-                    #RubiksState().apply_action(RubiksAction('B*')),
-                    #RubiksState().apply_action(RubiksAction('L*')),
-                    #RubiksState().apply_action(RubiksAction('R*')),
-                    #RubiksState().apply_action(RubiksAction('D2')),
-                    #RubiksState().apply_action(RubiksAction('U2')),
-                    #RubiksState().apply_action(RubiksAction('F2')),
-                    #RubiksState().apply_action(RubiksAction('B2')),
-                    #RubiksState().apply_action(RubiksAction('L2')),
-                    #RubiksState().apply_action(RubiksAction('R2'))
-                ]
-                target = RubiksState()
-                correct = 0
-                st = time.time()
-                for ans, state in test_states:
-                    x = state.trainable().to(device)
-                    y = model(x).item()
-                    print(ans, y)
-                    #res = greedy_search(model, device, state, target, 30)
-                    #if res > -1:
-                    #    correct += 1
-                en = time.time()
-                #print('Result: {}/{} ({})'.format(correct, len(test_states), en-st))
+        if m % log_step == 0:
+            print('batch {}, data: {}, loss = {}'.format(m, dataset_train.cur_idx, loss))
+            print('setup_time = {:0.4f}, pred_time = {:0.4f}, train_time = {:0.4f}' \
+                    .format(setup_time, pred_time, train_time))
+            wandb.log({'loss': loss}, step=m)
+
+            print('Performing test...')
+            freq = defaultdict()
+            test_states = [
+                (0, RubiksState()),
+                (1, RubiksState() \
+                    .apply_action(RubiksAction('R')) ),
+                (1, RubiksState() \
+                    .apply_action(RubiksAction('L')) ),
+                (1, RubiksState() \
+                    .apply_action(RubiksAction('L2')) ),
+                (2, RubiksState() \
+                    .apply_action(RubiksAction('R')) \
+                    .apply_action(RubiksAction('D')) ),
+                (2, RubiksState() \
+                    .apply_action(RubiksAction('B')) \
+                    .apply_action(RubiksAction('F2')) ),
+            ]
+            target = RubiksState()
+            correct = 0
+            st = time.time()
+            for idx, (ans, state) in enumerate(test_states):
+                x = state.trainable().to(device)
+                y = model(x).item()
+                print(ans, y)
+                wandb.log({'test{}'.format(idx): y}, step=m)
+                #res = greedy_search(model, device, state, target, 30)
+                #if res > -1:
+                #    correct += 1
+            en = time.time()
+            #print('Result: {}/{} ({})'.format(correct, len(test_states), en-st))
 
         m += 1
 
@@ -217,23 +205,22 @@ def entry(lr,
           bs,
           check,
           threshold,
-          test_step,
+          log_step,
           seed=1,
           epochs=1,
           cuda=False):
 
+    wandb.init(project='rubiks')
+
     torch.manual_seed(seed)
     device = torch.device("cuda" if cuda else "cpu")
 
-    state_dict = None
-    for i in range(epochs):
-        state_dict = davi(device=device,
-                          bs=bs,
-                          lr=lr,
-                          check=check,
-                          test_step=test_step,
-                          threshold=threshold,
-                          state_dict=state_dict)
+    state_dict = davi(device=device,
+                      bs=bs,
+                      lr=lr,
+                      check=check,
+                      log_step=log_step,
+                      threshold=threshold)
     torch.save(state_dict, 'model-weights.pt')
 
 

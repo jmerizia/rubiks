@@ -6,7 +6,7 @@ import random
 from multiprocessing import Pool
 
 DATA_DIR = './data/'
-MAX_SCRAMBLE_LENGTH = 3
+MAX_SCRAMBLE_LENGTH = 2
 
 def generate_states(n):
     """
@@ -19,12 +19,13 @@ def generate_states(n):
         for j in range(k):
             action = random.choice(state.get_next_actions())
             state = state.apply_action(action)
-        states.append(state)
+        states.append((k, state))
     return states
 
 
 def entry(n_data=1,
-          n_threads=1):
+          n_threads=1,
+          name='dataset'):
     """Generate the dataset and save it to disk."""
 
     # calculate how much to produce on each thread
@@ -42,11 +43,13 @@ def entry(n_data=1,
     # save it onto disk
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
-    fname = os.path.join(DATA_DIR, 'dataset.txt')
+    fname = os.path.join(DATA_DIR, name+'.txt')
     with open(fname, 'w') as f:
         f.write(str(len(states)))
         f.write('\n')
-        for state in states:
+        for k, state in states:
+            f.write(str(k))
+            f.write('\n')
             f.write(str(state))
             f.write('\n')
     print('Generated {} states and saved to {}'.format(len(states), fname))
