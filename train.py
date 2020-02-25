@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import fire
 import wandb
 import os
+import time
 from model import RubiksNetwork
 import numpy as np
 from rubiks import RubiksState, RubiksAction
@@ -40,48 +41,96 @@ class RubiksDataset:
 
 def predict(model, device, state):
     """Given a state and model, predict the heuristic."""
-    possible = []
-    for a in state.get_next_actions():
-        x = state.apply_action(a).to_numpy()
-        x = torch.tensor(x).to(device)
-        yh = 1 + model(x)
-        possible.append(yh)
-    possible = torch.stack(possible, 0)
-    ans = torch.min(possible, 0)
+
+    if state == RubiksState():
+        ans = torch.zeros([1], dtype=torch.float)
+
+    else:
+        possible = []
+        for a in state.get_next_actions():
+            x = state.apply_action(a)
+            if x == RubiksState():
+                y = torch.zeros([1], dtype=torch.float)
+            else:
+                x = x.trainable().to(device)
+                y = 1 + model(x)
+            possible.append(y)
+        possible = torch.stack(possible, 0)
+        ans = torch.min(possible, 0)[0]
+
     return ans
 
 
-def davi(device, batch_size, learning_rate, convergence_check, error_threshold):
+def greedy_search(model, device, start, target, depth):
+    state = start
+    for i in range(depth):
+
+        # we reached the target:
+        if state == target:
+            return i
+
+        # figure out which action is the best next one greedily:
+        next_state = None
+        cur_y = float('inf')
+        for action in state.get_next_actions():
+            cur_state = state.apply_action(action)
+            x = cur_state.trainable().to(device)
+            y = model(x).item()
+            if y < cur_y:
+                cur_y = y
+                next_state = cur_state
+
+        # set the best next state:
+        state = next_state
+
+    return -1
+
+
+def davi(device, bs, lr, check, test_step, threshold, state_dict=None):
     dataset = RubiksDataset('./data/dataset.txt')
     mseloss = nn.MSELoss()
-    theta = None
-    theta_e = None
+    theta = state_dict
+    theta_e = state_dict
     m = 1
-    while True:
+    while not dataset.empty():
 
         # initialize model parameters:
+        st = time.time()
         model = RubiksNetwork()
+        model_e = RubiksNetwork()
         if theta:
             model.load_state_dict(theta)
+        if theta_e:
+            model_e.load_state_dict(theta_e)
         model.to(device)
-        optimizer = optim.Adadelta(model.parameters(), lr=learning_rate)
+        model_e.to(device)
+        # we do not optimize model_e (it's just used for ff)
+        optimizer = optim.Adadelta(model.parameters(), lr=lr)
 
         # load batch:
-        states = dataset.get_next(batch_size)
+        states = dataset.get_next(bs)
+
+        en = time.time()
+        setup_time = en-st
 
         # feed forward (one level deep of tree):
+        st = time.time()
+        model_e.eval()
         y = []
         for state in states:
-            predict(model, device, state)
-        y = torch.cat(y)
+            yi = predict(model_e, device, state)
+            y.append(yi)
+        y = torch.stack(y, 0)
+        en = time.time()
+        pred_time = en-st
 
         # set up training:
         model.train()
         optimizer.zero_grad()
 
         # train with back prop:
-        x = [state.to_numpy() for state in states]
-        x = [torch.tensor(state) for state in states]
+        st = time.time()
+        x = [state.trainable() for state in states]
         x = torch.stack(x, 0)
         x = x.to(device)
         yp = model(x)
@@ -89,22 +138,103 @@ def davi(device, batch_size, learning_rate, convergence_check, error_threshold):
         out.backward()
         optimizer.step()
         loss = out.item()
+        en = time.time()
+        train_time = en-st
 
         # update weights:
         theta = model.state_dict()
-        if m % convergence_check and loss < error_threshold:
-            theta_e = model.state_dict()
+        if m % check == 0:
+            print('batch {}: loss = {}'.format(m, loss))
+            print('setup_time = {:0.4f}, pred_time = {:0.4f}, train_time = {:0.4f}' \
+                    .format(setup_time, pred_time, train_time))
+            if loss < threshold:
+                print('updating!')
+                theta_e = model.state_dict()
+
+                print('Performing test...')
+                test_states = [
+                    (0, RubiksState()),
+                    (1, RubiksState() \
+                        .apply_action(RubiksAction('R')) ),
+                    (1, RubiksState() \
+                        .apply_action(RubiksAction('L')) ),
+                    (1, RubiksState() \
+                        .apply_action(RubiksAction('L2')) ),
+                    (2, RubiksState() \
+                        .apply_action(RubiksAction('R')) \
+                        .apply_action(RubiksAction('D')) ),
+                    (2, RubiksState() \
+                        .apply_action(RubiksAction('B')) \
+                        .apply_action(RubiksAction('F2')) ),
+                    (3, RubiksState() \
+                        .apply_action(RubiksAction('B')) \
+                        .apply_action(RubiksAction('F2')) \
+                        .apply_action(RubiksAction('D')) ),
+                    (3, RubiksState() \
+                        .apply_action(RubiksAction('B')) \
+                        .apply_action(RubiksAction('D')) \
+                        .apply_action(RubiksAction('R')) ),
+                    (3, RubiksState() \
+                        .apply_action(RubiksAction('D')) \
+                        .apply_action(RubiksAction('R2')) \
+                        .apply_action(RubiksAction('F*')) )
+                    #RubiksState().apply_action(RubiksAction('D')),
+                    #RubiksState().apply_action(RubiksAction('U')),
+                    #RubiksState().apply_action(RubiksAction('F')),
+                    #RubiksState().apply_action(RubiksAction('B')),
+                    #RubiksState().apply_action(RubiksAction('L')),
+                    #RubiksState().apply_action(RubiksAction('R')),
+                    #RubiksState().apply_action(RubiksAction('D*')),
+                    #RubiksState().apply_action(RubiksAction('U*')),
+                    #RubiksState().apply_action(RubiksAction('F*')),
+                    #RubiksState().apply_action(RubiksAction('B*')),
+                    #RubiksState().apply_action(RubiksAction('L*')),
+                    #RubiksState().apply_action(RubiksAction('R*')),
+                    #RubiksState().apply_action(RubiksAction('D2')),
+                    #RubiksState().apply_action(RubiksAction('U2')),
+                    #RubiksState().apply_action(RubiksAction('F2')),
+                    #RubiksState().apply_action(RubiksAction('B2')),
+                    #RubiksState().apply_action(RubiksAction('L2')),
+                    #RubiksState().apply_action(RubiksAction('R2'))
+                ]
+                target = RubiksState()
+                correct = 0
+                st = time.time()
+                for ans, state in test_states:
+                    x = state.trainable().to(device)
+                    y = model(x).item()
+                    print(ans, y)
+                    #res = greedy_search(model, device, state, target, 30)
+                    #if res > -1:
+                    #    correct += 1
+                en = time.time()
+                #print('Result: {}/{} ({})'.format(correct, len(test_states), en-st))
 
         m += 1
 
 
-def entry(use_cuda=False):
-    device = torch.device("cuda" if use_cuda else "cpu")
-    davi(device=device,
-         batch_size=1,
-         learning_rate=0.01,
-         convergence_check=10,
-         error_threshold=0.01)
+def entry(lr,
+          bs,
+          check,
+          threshold,
+          test_step,
+          seed=1,
+          epochs=1,
+          cuda=False):
+
+    torch.manual_seed(seed)
+    device = torch.device("cuda" if cuda else "cpu")
+
+    state_dict = None
+    for i in range(epochs):
+        state_dict = davi(device=device,
+                          bs=bs,
+                          lr=lr,
+                          check=check,
+                          test_step=test_step,
+                          threshold=threshold,
+                          state_dict=state_dict)
+    torch.save(state_dict, 'model-weights.pt')
 
 
 if __name__ == '__main__':

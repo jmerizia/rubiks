@@ -6,7 +6,7 @@ import random
 from multiprocessing import Pool
 
 DATA_DIR = './data/'
-MAX_SCRAMBLE_LENGTH = 19
+MAX_SCRAMBLE_LENGTH = 3
 
 def generate_states(n):
     """
@@ -15,7 +15,7 @@ def generate_states(n):
     states = []
     for i in range(n):
         state = RubiksState()
-        k = random.randint(0, MAX_SCRAMBLE_LENGTH+1)
+        k = random.randint(0, MAX_SCRAMBLE_LENGTH)
         for j in range(k):
             action = random.choice(state.get_next_actions())
             state = state.apply_action(action)

@@ -6,11 +6,12 @@ import time
 import numpy as np
 from multiprocessing import Pool
 import fire
+import torch
 
 # "safe mode" can be enabled here if there's a bug or
 # something. It enables several checks for correctness,
 # but it also slows down the graph search.
-SAFE_MODE = False
+SAFE_MODE = True
 
 MODEL_CHECKPOINT_DIR = os.path.join(
         os.path.dirname(__file__), 
@@ -109,6 +110,8 @@ class RubiksAction(Action):
             mult, basic_name = 1, name
         elif name in EXTENDED_RUBIKS_PERMS:
             mult, basic_name = EXTENDED_RUBIKS_PERMS[name]
+        else:
+            raise ValueError('RubiksAction.get_perm :: Invalid perm name {}'.format(name))
 
         # The above permutations are not written fully.
         # They only map the sticker spots that they change.
@@ -184,8 +187,11 @@ class RubiksState(State):
         random.shuffle(actions)
         return actions
 
-    def to_numpy(self):
-        return np.array(self.perm)
+    def trainable(self):
+        x = [RUBIKS_COLORS[i] for i in self.perm]
+        x = np.array(x) / 7
+        x = torch.tensor(x).float()
+        return x
 
 
 class RubiksGraph(Graph):

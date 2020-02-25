@@ -84,8 +84,8 @@ class State(ABC):
         pass
 
     @abstractmethod
-    def to_numpy(self):
-        """Returns a numpy array for training."""
+    def trainable(self):
+        """Returns a torch float tensor for training."""
         pass
 
 

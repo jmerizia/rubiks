@@ -1,4 +1,8 @@
 python train.py \
-    --epochs 120 \
-    --learning-rate 0.0002 \
-    --batch-size 1000
+    --lr 0.001 \
+    --bs 16 \
+    --check 100 \
+    --threshold 0.1 \
+    --test-step 100 \
+    --epochs 5
+
