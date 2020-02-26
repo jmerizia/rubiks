@@ -72,7 +72,7 @@ def greedy_search(model, device, start, target, depth):
 
         # we reached the target:
         if state == target:
-            return i
+            return True
 
         # figure out which action is the best next one greedily:
         next_state = None
@@ -88,10 +88,10 @@ def greedy_search(model, device, start, target, depth):
         # set the best next state:
         state = next_state
 
-    return -1
+    return False
 
 
-def davi(device, bs, lr, check, log_step, threshold):
+def davi(device, bs, lr, check, log_step, greedy_test_step, threshold):
     print('Running DAVI')
     st = time.time()
     dataset_train = RubiksDataset('./data/train.txt')
@@ -100,44 +100,24 @@ def davi(device, bs, lr, check, log_step, threshold):
     en = time.time()
     print('Loaded dataset in {:0.4f} seconds'.format(en-st))
     mseloss = nn.MSELoss()
-    theta = None
-    theta_e = None
+    model_e = RubiksNetwork().to(device)
+    model = RubiksNetwork().to(device)
+    model.train()
+    optimizer = optim.Adadelta(model.parameters(), lr=lr)
+    optimizer.zero_grad()
     m = 1
     while not dataset_train.empty():
-
-        # initialize model parameters:
-        st = time.time()
-        model = RubiksNetwork()
-        model_e = RubiksNetwork()
-        if theta:
-            model.load_state_dict(theta)
-        if theta_e:
-            model_e.load_state_dict(theta_e)
-        model.to(device)
-        model_e.to(device)
-        # we do not optimize model_e (it's just used for ff)
-        optimizer = optim.Adadelta(model.parameters(), lr=lr)
 
         # load batch:
         labels, states = dataset_train.get_next(bs)
 
-        en = time.time()
-        setup_time = en-st
-
         # feed forward (one level deep of tree):
         st = time.time()
         model_e.eval()
-        y = []
-        for state in states:
-            yi = predict(model_e, device, state)
-            y.append(yi)
-        y = torch.stack(y, 0)
+        y = [predict(model_e, device, state) for state in states]
+        y = torch.stack(y, 0).numpy()
         en = time.time()
         pred_time = en-st
-
-        # set up training:
-        model.train()
-        optimizer.zero_grad()
 
         # train with back prop:
         st = time.time()
@@ -153,20 +133,20 @@ def davi(device, bs, lr, check, log_step, threshold):
         train_time = en-st
 
         # update weights:
-        theta = model.state_dict()
         if m % check == 0:
             if loss < threshold:
                 print('updating!')
-                theta_e = model.state_dict()
-                wandb.log({'update': 1}, step=m)
+                model_e.load_state_dict(model.state_dict())
+                wandb.log({'update': 1}, step=dataset_train.cur_idx)
             else:
-                wandb.log({'update': 0}, step=m)
+                wandb.log({'update': 0}, step=dataset_train.cur_idx)
 
+        # perform test
         if m % log_step == 0:
             print('batch {}, data: {}, loss = {}'.format(m, dataset_train.cur_idx, loss))
-            print('setup_time = {:0.4f}, pred_time = {:0.4f}, train_time = {:0.4f}' \
+            print('pred_time = {:0.4f}, train_time = {:0.4f}' \
                     .format(setup_time, pred_time, train_time))
-            wandb.log({'loss': loss}, step=m)
+            wandb.log({'loss': loss}, step=dataset_train.cur_idx)
 
             print('Performing test...')
             freq = defaultdict(lambda: 0)
@@ -177,30 +157,36 @@ def davi(device, bs, lr, check, log_step, threshold):
             for k, state in zip(test_labels, test_states):
                 x = state.trainable().to(device)
                 y = model(x).item()
-                if abs(y - k) < 0.3:
+                if abs(y - k) < 0.5:
                     freq[k] += 1
                 tota[k] += 1
                 uniq.add(k)
             for k in uniq:
                 acc = freq[k] / tota[k]
-                wandb.log({'k-{}'.format(k): acc}, step=m)
+                wandb.log({'k-{}'.format(k): acc}, step=dataset_train.cur_idx)
                 print('acc k-{} {}'.format(k, acc))
-                #res = greedy_search(model, device, state, target, 30)
-                #if res > -1:
-                #    correct += 1
             en = time.time()
-            #print('Result: {}/{} ({})'.format(correct, len(test_states), en-st))
+
+        if m % greedy_test_step == 0:
+            correct = 0
+            for state in test_states:
+                if greedy_search(model, device, state, target, 10):
+                    correct += 1
+            print('Greedy Search Result: {}/{} ({})'.format(correct, len(test_states), en-st))
+            acc = correct / len(test_states)
+            wandb.log({'greedy-search': acc}, step=dataset_train.cur_idx)
 
         m += 1
 
 
-def entry(lr,
-          bs,
-          check,
-          threshold,
-          log_step,
+def entry(lr=0.005,
+          bs=400,
+          check=100,
+          threshold=0.05,
+          log_step=20,
+          greedy_test_step=50,
           seed=1,
-          cuda=False):
+          cuda=True):
 
     wandb.init(project='rubiks')
 
@@ -212,6 +198,7 @@ def entry(lr,
                       lr=lr,
                       check=check,
                       log_step=log_step,
+                      greedy_test_step=greedy_test_step,
                       threshold=threshold)
     torch.save(state_dict, 'model-weights.pt')
 
