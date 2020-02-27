@@ -193,6 +193,8 @@ def entry(lr=0.005,
     torch.manual_seed(seed)
     device = torch.device("cuda" if cuda else "cpu")
 
+
+    
     state_dict = davi(device=device,
                       bs=bs,
                       lr=lr,
