@@ -23,8 +23,8 @@ def generate_states(n):
     return states
 
 
-def entry(n_data=1,
-          n_threads=1,
+def entry(n_data=int(5e5),
+          n_threads=4,
           name='dataset'):
     """Generate the dataset and save it to disk."""
 
