@@ -5,5 +5,5 @@ cache_files/rubiks_cache.in
 venv/
 logs/
 data/
-model-weights.pt
+*.pt
 wandb/

@@ -10,13 +10,16 @@ from model import RubiksNetwork
 import numpy as np
 from rubiks import RubiksState, RubiksAction
 from collections import defaultdict
+from multiprocessing import Pool
+INF = float('inf')
+
 
 class RubiksDataset:
-    def __init__(self, dataset_fname):
+    def __init__(self, dataset_fname, max_data=INF):
         self.states = []
         self.labels = []
         with open(dataset_fname) as f:
-            self.l = int(f.readline())
+            self.l = min(max_data, int(f.readline()))
             for i in range(self.l):
                 k = int(f.readline())
                 state = tuple(map(int, f.readline().split()))
@@ -58,12 +61,13 @@ def predict(model, device, state):
         for a in state.get_next_actions():
             x = state.apply_action(a)
             if x == RubiksState():
-                y = 1 + torch.zeros([1], dtype=torch.float).to(device)
+                y = 1 + torch.zeros([1, 1], dtype=torch.float).to(device)
             else:
                 x = x.trainable().to(device)
+                x = x.unsqueeze(0)
                 y = 1 + model(x)
             possible.append(y)
-        possible = torch.stack(possible, 0)
+        possible = torch.cat(possible, 0)
         ans, ind = torch.min(possible, 0)
 
     return ans
@@ -94,19 +98,42 @@ def greedy_search(model, device, start, target, depth):
     return False
 
 
-def supervised(model, device, dataset_train, dataset_test, bs, lr, log_step):
+
+def calc_accuracy(model, device, test_labels, test_states):
+    freq = defaultdict(lambda: 0)
+    tota = defaultdict(lambda: 0)
+    uniq = set()
+    acc = dict()
+    for k, state in zip(test_labels, test_states):
+        x = state.trainable().to(device)
+        x = x.unsqueeze(0)
+        y = model(x).item()
+        if abs(y - k) < 0.5:
+            freq[k] += 1
+        tota[k] += 1
+        uniq.add(k)
+    for k in uniq:
+        acc[k] = freq[k] / tota[k]
+    return acc
+
+
+def supervised(model, device, dataset, epoch, bs, lr, log_step):
     print('[SUP] Running supervised training')
-    model.train()
     optimizer = optim.Adadelta(model.parameters(), lr=lr)
     optimizer.zero_grad()
     mseloss = nn.MSELoss()
 
     m = 1
-    while not dataset_train.empty():
-        labels, states = dataset_train.get_next(bs)
+    while not dataset.empty():
+
+        # collect batch
+        labels, states = dataset.get_next(bs)
 
         # train with back-prop
         st = time.time()
+        y = torch.tensor(labels)
+        y = y.to(device)
+        y = y.unsqueeze(1)
         x = [state.trainable() for state in states]
         x = torch.stack(x, 0)
         x = x.to(device)
@@ -117,27 +144,14 @@ def supervised(model, device, dataset_train, dataset_test, bs, lr, log_step):
         loss = out.item()
         en = time.time()
         train_time = en-st
-        
+
         if m % log_step == 0:
-            print('Batch')
+            print('[SUP] epoch: {}, batch: {}, data: {}, loss: {:0.4f}'.format(epoch, m, dataset.cur_idx, loss))
+            print('[SUP] train_time = {:0.4f}'.format(train_time))
 
+        m += 1
 
-def calc_accuracy(model, test_labels, test_states):
-    freq = defaultdict(lambda: 0)
-    tota = defaultdict(lambda: 0)
-    uniq = set()
-    target = RubiksState()
-    for k, state in zip(test_labels, test_states):
-        x = state.trainable().to(device)
-        y = model(x).item()
-        if abs(y - k) < 0.5:
-            freq[k] += 1
-        tota[k] += 1
-        uniq.add(k)
-    for k in uniq:
-        acc = freq[k] / tota[k]
-        wandb.log({'DAVI-k-{}'.format(k): acc}, step=dataset_train.cur_idx)
-        print('[DAVI] acc k-{} {}'.format(k, acc))
+    return loss
 
 
 def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, greedy_test_step, threshold):
@@ -154,7 +168,6 @@ def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, gr
     model_e.eval()
 
     optimizer = optim.Adadelta(model.parameters(), lr=lr)
-    optimizer.zero_grad()
     m = 1
     while not dataset_train.empty():
 
@@ -164,17 +177,20 @@ def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, gr
         # feed forward (one level deep of tree):
         st = time.time()
         y = [predict(model_e, device, state) for state in states]
-        y = torch.stack(y, 0).numpy()
+        y = torch.stack(y, 0)
         en = time.time()
         pred_time = en-st
 
         # train with back prop:
         st = time.time()
-        x = [state.trainable() for state in states]
+        optimizer.zero_grad()
+        # computing x and moving to device is actually quite fast...
+        x = [state.trainable() for state in states]  
         x = torch.stack(x, 0)
         x = x.to(device)
         yp = model(x)
         out = mseloss(y, yp)
+        # the majority of the time is spent doing backprop...
         out.backward()
         optimizer.step()
         loss = out.item()
@@ -183,46 +199,61 @@ def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, gr
 
         # update weights:
         if m % check == 0:
+            print('[DAVI] Checking for convergence...')
             if loss < threshold:
                 print('[DAVI] updating!')
                 model_e.load_state_dict(model.state_dict())
+                model_e.eval()
                 wandb.log({'DAVI-update': 1}, step=dataset_train.cur_idx)
             else:
                 wandb.log({'DAVI-update': 0}, step=dataset_train.cur_idx)
 
         # perform test
         if m % log_step == 0:
+            model.eval()
             print('[DAVI] batch {}, data: {}, loss = {}'.format(m, dataset_train.cur_idx, loss))
-            print('[DAVI] pred_time = {:0.4f}, train_time = {:0.4f}' \
-                    .format(setup_time, pred_time, train_time))
             wandb.log({'DAVI-loss': loss}, step=dataset_train.cur_idx)
 
-
             print('[DAVI] Performing test...')
-            uniq = calc_accuracy(model, test_labels, test_states)
+            accs = calc_accuracy(model, device, test_labels, test_states)
+            for k, acc in accs.items():
+                wandb.log({'DAVI-k-{}'.format(k): acc}, step=dataset_train.cur_idx)
+                print('[DAVI] acc k-{} {}'.format(k, acc))
+            model.train()
 
+        # Check greedy solve
+        #if m % greedy_test_step == 0:
+        #    model.eval()
+        #    correct = 0
+        #    target = RubiksState()
+        #    for state in test_states:
+        #        if greedy_search(model, device, state, target, 10):
+        #            correct += 1
+        #    print('[DAVI] Greedy Search Result: {}/{} ({})'.format(correct, len(test_states), en-st))
+        #    acc = correct / len(test_states)
+        #    wandb.log({'DAVI-greedy-search': acc}, step=dataset_train.cur_idx)
+        #    model.train()
 
-        if m % greedy_test_step == 0:
-            correct = 0
-            for state in test_states:
-                if greedy_search(model, device, state, target, 10):
-                    correct += 1
-            print('[DAVI] Greedy Search Result: {}/{} ({})'.format(correct, len(test_states), en-st))
-            acc = correct / len(test_states)
-            wandb.log({'DAVI-greedy-search': acc}, step=dataset_train.cur_idx)
-
+        print('[DAVI] Finished batch {}'.format(m))
+        print('[DAVI] pred_time = {:0.4f}, train_time = {:0.4f}'.format(pred_time, train_time))
         m += 1
 
 
-def entry(sup_lr=0.005,
-          davi_lr=0.005,
-          sup_bs=400,
-          davi_bs=400,
-          sup_log_step=20,
-          davi_log_step=20,
-          check=100,
-          threshold=0.05,
-          greedy_test_step=50,
+def entry(
+          # supervised parameters
+          sup_epochs=50,
+          sup_lr=0.008,
+          sup_bs=5000,
+          sup_log_step=10, # how often to print to console
+          # davi parameters
+          davi_epochs=1,
+          davi_lr=0.0005,
+          davi_bs=100,
+          davi_log_step=10, # how often to print to console and wandb (# batches)
+          check=100, # how often to check for convergence (# batches)
+          threshold=0.05, # threshold for convergence
+          greedy_test_step=20, # how often to perform greedy search test (# batches)
+          skip_sup=False,
           seed=1,
           cuda=True):
 
@@ -231,26 +262,62 @@ def entry(sup_lr=0.005,
     torch.manual_seed(seed)
     device = torch.device("cuda" if cuda else "cpu")
 
-    print('Loading datasets:')
-    dataset_train_davi = RubiksDataset('./data/davi-train.txt')
-    dataset_train_sup  = RubiksDataset('./data/sup-train.txt')
-    dataset_test_davi  = RubiksDataset('./data/test.txt')
-    dataset_test_sup   = RubiksDataset('./data/test.txt')
-    en = time.time()
-    print('Loaded dataset in {:0.4f} seconds'.format(en-st))
+    model = RubiksNetwork()
+    model.to(device)
 
-    supervised(model=model,
-               device=device,
-               dataset_train=None,
-               dataset_test=None,
-               bs=sup_bs,
-               lr=sup_lr,
-               log_step=sup_log_step)
+    if not skip_sup:
+
+        print('[SUP] Loading datasets:')
+        st = time.time()
+        dataset_train_sup  = RubiksDataset('./data/sup-train.txt')
+        dataset_test_sup   = RubiksDataset('./data/test.txt')
+        en = time.time()
+        print('[SUP] Loaded datasets in {:0.4f} seconds'.format(en-st))
+
+        # train in supervised fashion
+        for epoch in range(1, sup_epochs+1):
+
+            model.train()
+            loss = supervised(model=model,
+                              device=device,
+                              dataset=dataset_train_sup,
+                              epoch=epoch,
+                              bs=sup_bs,
+                              lr=sup_lr,
+                              log_step=sup_log_step)
+
+            wandb.log({'SUP-loss': loss}, step=epoch)
+            model.eval()
+            test_labels, test_states = dataset_test_sup.get_next(len(dataset_test_sup))
+            accs = calc_accuracy(model, device, test_labels, test_states)
+            msg = ''
+            for k, acc in accs.items():
+                msg += '{}: {:0.4f}, '.format(k, acc)
+                wandb.log({'SUP-k-{}'.format(k): acc}, step=epoch)
+            print('[SUP] epoch {} ->'.format(epoch), msg)
+            dataset_train_sup.reset()
+            dataset_test_sup.reset()
+
+        # save checkpoint
+        torch.save(model.state_dict(), 'model-sup.pt')
+
+    else:
+
+        print('Loading supervised-trained model instead...')
+        model.load_state_dict(torch.load('model-sup.pt'))
+
+    print('[DAVI] Loading datasets:')
+    st = time.time()
+    dataset_train_davi = RubiksDataset('./data/davi-train.txt', 1000)
+    dataset_test_davi  = RubiksDataset('./data/test.txt', 1000)
+    en = time.time()
+    print('[DAVI] Loaded datasets in {:0.4f} seconds'.format(en-st))
     
+    # train in reinforcement fashion
     davi(model=model,
          device=device,
-         dataset_train=None,
-         dataset_test=None,
+         dataset_train=dataset_train_davi,
+         dataset_test=dataset_test_davi,
          bs=davi_bs,
          lr=davi_lr,
          log_step=davi_log_step,
@@ -258,7 +325,7 @@ def entry(sup_lr=0.005,
          greedy_test_step=greedy_test_step,
          threshold=threshold)
 
-    torch.save(state_dict, 'model-weights.pt')
+    torch.save(model.state_dict(), 'model-davi.pt')
 
 
 if __name__ == '__main__':

@@ -1,3 +1,14 @@
+"""
+ -- Dataset Specification --
+First line contains an integer N denoting the number of examples.
+The next lines represent the N examples:
+    the first line is an integer K denoting the heuristic,
+    the second line is a list of numbers denoting sticker colors,
+    the third line is an integer M representing the number of next states,
+    the next M lines each contain a single next state:
+        the next state is determined by another list of sticker colors.
+"""
+
 import os
 from rubiks import RubiksAction, RubiksState
 import fire
@@ -36,11 +47,13 @@ def entry(n_data=int(5e5),
         x -= n_threads
 
     # generate the dataset into memory
+    print('Generating data')
     p = Pool(n_threads)
     states = p.map(generate_states, parts)
     states = list(itertools.chain(*states))  # flatten
 
     # save it onto disk
+    print('Saving to disk')
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR)
     fname = os.path.join(DATA_DIR, name+'.txt')
