@@ -11,15 +11,19 @@ class ResidLayer(nn.Module):
         self.bn2 = nn.BatchNorm1d(size)
 
     def forward(self, x):
-        r = x
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.bn1(x)
-        x = self.fc2(x)
-        x = x + r
-        x = F.relu(x)
-        x = self.bn2(x)
-        return x
+        identity = x
+
+        out = self.fc1(x)
+        out = self.bn1(out)
+        out = F.relu(out)
+
+        out = self.fc2(out)
+        out = self.bn2(out)
+
+        out += identity
+        xout = F.relu(out)
+
+        return out
 
 class RubiksNetwork(nn.Module):
     def __init__(self):
@@ -37,12 +41,12 @@ class RubiksNetwork(nn.Module):
 
     def forward(self, x):
         x = self.fc1(x)
-        x = F.relu(x)
         x = self.bn1(x)
+        x = F.relu(x)
 
         x = self.fc2(x)
-        x = F.relu(x)
         x = self.bn2(x)
+        x = F.relu(x)
 
         x = self.r1(x)
         x = self.r2(x)

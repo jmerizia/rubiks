@@ -154,11 +154,10 @@ def supervised(model, device, dataset, epoch, bs, lr, log_step):
     return loss
 
 
-def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, greedy_test_step, threshold):
+def davi(model, device, dataset_train, dataset_test, step, bs, lr, log_step, check, greedy_test_step, threshold):
 
     print('[DAVI] Running DAVI')
     test_labels, test_states = dataset_test.get_next(len(dataset_test))
-    model.train()
     mseloss = nn.MSELoss()
 
     # set up copied model
@@ -173,6 +172,7 @@ def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, gr
 
         # load batch:
         labels, states = dataset_train.get_next(bs)
+        step += len(states)
 
         # feed forward (one level deep of tree):
         st = time.time()
@@ -182,6 +182,7 @@ def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, gr
         pred_time = en-st
 
         # train with back prop:
+        model.train()
         st = time.time()
         optimizer.zero_grad()
         # computing x and moving to device is actually quite fast...
@@ -204,22 +205,21 @@ def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, gr
                 print('[DAVI] updating!')
                 model_e.load_state_dict(model.state_dict())
                 model_e.eval()
-                wandb.log({'DAVI-update': 1}, step=dataset_train.cur_idx)
+                wandb.log({'DAVI-update': 1}, step=step)
             else:
-                wandb.log({'DAVI-update': 0}, step=dataset_train.cur_idx)
+                wandb.log({'DAVI-update': 0}, step=step)
 
         # perform test
         if m % log_step == 0:
             model.eval()
-            print('[DAVI] batch {}, data: {}, loss = {}'.format(m, dataset_train.cur_idx, loss))
-            wandb.log({'DAVI-loss': loss}, step=dataset_train.cur_idx)
+            print('[DAVI] batch {}, step: {}, loss = {}'.format(m, step, loss))
+            wandb.log({'DAVI-loss': loss}, step=step)
 
             print('[DAVI] Performing test...')
             accs = calc_accuracy(model, device, test_labels, test_states)
             for k, acc in accs.items():
-                wandb.log({'DAVI-k-{}'.format(k): acc}, step=dataset_train.cur_idx)
+                wandb.log({'DAVI-k-{}'.format(k): acc}, step=step)
                 print('[DAVI] acc k-{} {}'.format(k, acc))
-            model.train()
 
         # Check greedy solve
         #if m % greedy_test_step == 0:
@@ -234,9 +234,11 @@ def davi(model, device, dataset_train, dataset_test, bs, lr, log_step, check, gr
         #    wandb.log({'DAVI-greedy-search': acc}, step=dataset_train.cur_idx)
         #    model.train()
 
-        print('[DAVI] Finished batch {}'.format(m))
+        print('[DAVI] Finished batch {}, loss = {:0.4f}'.format(m, loss))
         print('[DAVI] pred_time = {:0.4f}, train_time = {:0.4f}'.format(pred_time, train_time))
         m += 1
+
+    return step
 
 
 def entry(
@@ -247,10 +249,10 @@ def entry(
           sup_log_step=10, # how often to print to console
           # davi parameters
           davi_epochs=1,
-          davi_lr=0.0005,
-          davi_bs=100,
+          davi_lr=0.01,
+          davi_bs=200,
           davi_log_step=10, # how often to print to console and wandb (# batches)
-          check=100, # how often to check for convergence (# batches)
+          check=20, # how often to check for convergence (# batches)
           threshold=0.05, # threshold for convergence
           greedy_test_step=20, # how often to perform greedy search test (# batches)
           skip_sup=False,
@@ -303,29 +305,45 @@ def entry(
 
     else:
 
-        print('Loading supervised-trained model instead...')
-        model.load_state_dict(torch.load('model-sup.pt'))
+        pass
+        #print('Loading supervised-trained model instead...')
+        #model.load_state_dict(torch.load('model-sup.pt'))
 
-    print('[DAVI] Loading datasets:')
-    st = time.time()
-    dataset_train_davi = RubiksDataset('./data/davi-train.txt', 1000)
-    dataset_test_davi  = RubiksDataset('./data/test.txt', 1000)
-    en = time.time()
-    print('[DAVI] Loaded datasets in {:0.4f} seconds'.format(en-st))
-    
-    # train in reinforcement fashion
-    davi(model=model,
-         device=device,
-         dataset_train=dataset_train_davi,
-         dataset_test=dataset_test_davi,
-         bs=davi_bs,
-         lr=davi_lr,
-         log_step=davi_log_step,
-         check=check,
-         greedy_test_step=greedy_test_step,
-         threshold=threshold)
+    davi_training_datasets = [
+        ('./data/davi-1.txt', 3),
+        ('./data/davi-2.txt', 1),
+        ('./data/davi-3.txt', 1),
+        ('./data/davi-4.txt', 1),
+        ('./data/davi-5.txt', 1),
+        ('./data/davi-6.txt', 1)
+    ]
 
-    torch.save(model.state_dict(), 'model-davi.pt')
+    step = 0
+    for fname, epochs in davi_training_datasets:
+
+        for i in range(1, epochs+1):
+
+            print('[DAVI] Loading dataset', fname)
+            st = time.time()
+            dataset_train_davi = RubiksDataset(fname)
+            dataset_test_davi  = RubiksDataset('./data/test.txt')
+            en = time.time()
+            print('[DAVI] Loaded dataset in {:0.4f} seconds'.format(en-st))
+
+            # train in reinforcement fashion
+            step = davi(model=model,
+                        device=device,
+                        dataset_train=dataset_train_davi,
+                        dataset_test=dataset_test_davi,
+                        step=step,
+                        bs=davi_bs,
+                        lr=davi_lr,
+                        log_step=davi_log_step,
+                        check=check,
+                        greedy_test_step=greedy_test_step,
+                        threshold=threshold)
+
+        torch.save(model.state_dict(), 'model-davi.pt')
 
 
 if __name__ == '__main__':

@@ -17,16 +17,15 @@ import random
 from multiprocessing import Pool
 
 DATA_DIR = './data/'
-MAX_SCRAMBLE_LENGTH = 5
 
-def generate_states(n):
+def generate_states(n, max_scramble_length):
     """
     Returns a list of random states.
     """
     states = []
     for i in range(n):
         state = RubiksState()
-        k = random.randint(0, MAX_SCRAMBLE_LENGTH)
+        k = random.randint(0, max_scramble_length)
         for j in range(k):
             action = random.choice(state.get_next_actions())
             state = state.apply_action(action)
@@ -36,7 +35,8 @@ def generate_states(n):
 
 def entry(n_data=int(5e5),
           n_threads=4,
-          name='dataset'):
+          name='dataset',
+          max_scramble_length=5):
     """Generate the dataset and save it to disk."""
 
     # calculate how much to produce on each thread
@@ -49,7 +49,7 @@ def entry(n_data=int(5e5),
     # generate the dataset into memory
     print('Generating data')
     p = Pool(n_threads)
-    states = p.map(generate_states, parts)
+    states = p.starmap(generate_states, zip(parts, [max_scramble_length]*len(parts)))
     states = list(itertools.chain(*states))  # flatten
 
     # save it onto disk
