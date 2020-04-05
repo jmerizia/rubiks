@@ -7,3 +7,4 @@ logs/
 data/
 *.pt
 wandb/
+.ipynb_checkpoints/

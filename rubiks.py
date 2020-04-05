@@ -189,7 +189,7 @@ class RubiksState(State):
 
     def trainable(self):
         x = [RUBIKS_COLORS[i] for i in self.perm]
-        x = np.array(x) / 7
+        x = np.array(x) #/ 7
         x = torch.tensor(x).float()
         return x
 

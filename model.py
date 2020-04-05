@@ -21,7 +21,7 @@ class ResidLayer(nn.Module):
         out = self.bn2(out)
 
         out += identity
-        xout = F.relu(out)
+        out = F.relu(out)
 
         return out
 
