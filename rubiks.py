@@ -19,6 +19,35 @@ MODEL_CHECKPOINT_DIR = os.path.join(
 
 MAX_SCRAMBLE_LENGTH = 19
 
+"""
+For reference, here are the sticker labels.
+Order is: F, R, L, D, U, B
+
+10 11 12
+13 14 15   
+16 17 18   
+
+37 38 39
+40 41 42
+43 44 45
+
+46 47 48
+49 50 51  
+52 53 54  
+
+19 20 21
+22 23 24
+25 26 27
+
+1  2  3
+4  5  6
+7  8  9
+
+28 29 30
+31 32 33
+34 35 36
+"""
+
 RUBIKS_PERMS = {
     'F': {
         10: 12, 12: 18, 18: 16, 16: 10,
@@ -101,6 +130,15 @@ RUBIKS_COLORS = {
     46: 6,  47: 6,  48: 6,  49: 6,  50: 6,  51: 6,  52: 6,  53: 6,  54: 6
 }
 
+COLOR_NAMES = {
+    1: 'W',
+    2: 'Y',
+    3: 'B',
+    4: 'G',
+    5: 'R',
+    6: 'O'
+}
+
 
 class RubiksAction(Action):
 
@@ -166,7 +204,39 @@ class RubiksState(State):
         return ' '.join(map(str, self.perm))
 
     def __repr__(self):
-        return str(self.perm)
+        p = self.perm
+        w = [
+                             p[1 -1], p[2 -1], p[3 -1], 
+                             p[4 -1], p[5 -1], p[6 -1], 
+                             p[7 -1], p[8 -1], p[9 -1], 
+ 
+p[46-1], p[47-1], p[48-1],   p[10-1], p[11-1], p[12-1],   p[37-1], p[38-1], p[39-1],
+p[49-1], p[50-1], p[51-1],   p[13-1], p[14-1], p[15-1],   p[40-1], p[41-1], p[42-1],
+p[52-1], p[53-1], p[54-1],   p[16-1], p[17-1], p[18-1],   p[43-1], p[44-1], p[45-1],
+
+                             p[19-1], p[20-1], p[21-1],
+                             p[22-1], p[23-1], p[24-1],
+                             p[25-1], p[26-1], p[27-1],
+
+                             p[28-1], p[29-1], p[30-1],
+                             p[31-1], p[32-1], p[33-1],           
+                             p[34-1], p[35-1], p[36-1]
+        ]
+        return ("      x x x      \n" +  \
+                "      x x x      \n" +  \
+                "      x x x      \n" +  \
+                "x x x x x x x x x\n" +  \
+                "x x x x x x x x x\n" +  \
+                "x x x x x x x x x\n" +  \
+                "      x x x      \n" +  \
+                "      x x x      \n" +  \
+                "      x x x      \n" +  \
+                "      x x x      \n" +  \
+                "      x x x      \n" +  \
+                "      x x x      ")     \
+                    .replace('x', '{}')  \
+                    .format(*[COLOR_NAMES[RUBIKS_COLORS[x]] for x in w])
+
 
     def apply_action(self, a: RubiksAction) -> 'RubiksState':
         if SAFE_MODE:
@@ -181,6 +251,12 @@ class RubiksState(State):
                 new_perm[a.perm[i] - 1] = cur_perm[i - 1]
             cur_perm = new_perm
         return RubiksState(tuple(cur_perm))
+
+    def apply_scramble(self, s: str) -> 'RubiksState':
+        cur = self
+        for c in s:
+            cur = cur.apply_action(RubiksAction(c))
+        return cur
 
     def get_next_actions(self) -> list:
         actions = [RubiksAction(a) for a in RUBIKS_ACTIONS]
@@ -210,5 +286,10 @@ class RubiksGraph(Graph):
         return [value[0] for value in result]
         #return [0 for _ in states]
 
+
+if __name__ == '__main__':
+    s = RubiksState() \
+        .apply_action(RubiksAction('U'))
+    print(repr(s))
 
 

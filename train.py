@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import fire
 import os
 import time
+import wandb
 from model import RubiksNetwork
 import numpy as np
 import random
@@ -12,11 +13,13 @@ from rubiks import RubiksState, RubiksAction
 from collections import defaultdict
 from multiprocessing import Pool
 INF = float('inf')
+global_step = 1
 
 class RubiksDataset:
     def __init__(self, dataset_fname, max_data=INF, shuffle=False):
         self.states = []
         self.labels = []
+        self.shuffle = shuffle
         with open(dataset_fname) as f:
             self.l = min(max_data, int(f.readline()))
             for i in range(self.l):
@@ -26,9 +29,10 @@ class RubiksDataset:
                 self.states.append(state)
                 self.labels.append(k)
         self.cur_idx = 0
-        comb = list(zip(self.labels, self.states))
-        random.shuffle(comb)
-        self.labels, self.states = zip(*comb)
+        if self.shuffle:
+            comb = list(zip(self.labels, self.states))
+            random.shuffle(comb)
+            self.labels, self.states = zip(*comb)
         self.labels = list(self.labels)
         self.states = list(self.states)
 
@@ -52,28 +56,34 @@ class RubiksDataset:
 
     def reset(self):
         self.cur_idx = 0
+        if self.shuffle:
+            comb = list(zip(self.labels, self.states))
+            random.shuffle(comb)
+            self.labels, self.states = zip(*comb)
 
 
-def predict(model, device, state):
-    """Given a state and model, predict the heuristic."""
+def bfs1d(model, device, state):
+    """Return the minimum policy of all possible next states plus 1."""
 
-    if state == RubiksState():
-        ans = torch.zeros([1], dtype=torch.float).to(device)
+    # I think this makes convergence faster:
+    #if state == RubiksState():
+    #    return torch.zeros([1], dtype=torch.float).to(device)
 
-    else:
-        possible = []
-        for a in state.get_next_actions():
-            x = state.apply_action(a)
-            if x == RubiksState():
-                y = 1 + torch.zeros([1, 1], dtype=torch.float).to(device)
-            else:
-                x = x.trainable().to(device)
-                x = x.unsqueeze(0)
-                y = 1 + model(x)
-            possible.append(y)
-        possible = torch.cat(possible, 0)
-        ans, ind = torch.min(possible, 0)
+    #for a in state.get_next_actions():
+    #    x = state.apply_action(a)
+    #    if x == RubiksState():
+    #        return 1 + torch.zeros([1], dtype=torch.float).to(device)
 
+    model.eval()
+    possible = []
+    for a in state.get_next_actions():
+        x = state.apply_action(a)
+        x = x.trainable().to(device)
+        x = x.unsqueeze(0)
+        y = 1 + model(x)
+        possible.append(y)
+    possible = torch.cat(possible, 0)
+    ans, ind = torch.min(possible, 0)
     return ans
 
 
@@ -121,9 +131,11 @@ def calc_accuracy(model, device, test_labels, test_states):
     return acc
 
 
-def davi(model, device, optim, dataset, bs):
+def davi(model, device, optim, dataset, eval_labels, eval_states, bs):
+    global global_step
 
     m = 1
+    total_loss = 0
     while not dataset.empty():
 
         # load batch:
@@ -132,7 +144,7 @@ def davi(model, device, optim, dataset, bs):
         # feed forward (one level deep of tree):
         st = time.time()
         model.eval()
-        y = [predict(model, device, state) for state in states]
+        y = [bfs1d(model, device, state) for state in states]
         y = torch.stack(y, 0)
         en = time.time()
         pred_time = en-st
@@ -148,24 +160,30 @@ def davi(model, device, optim, dataset, bs):
         yp = model(x)
         out = F.mse_loss(y, yp)
         # the majority of the time is spent doing backprop...
+        # (I'm sure my GPU cores are getting saturated)
         out.backward()
         optim.step()
         loss = out.item()
         en = time.time()
         train_time = en-st
 
+        total_loss += loss
         print('[DAVI] Finished batch {}, LOSS = {:0.4f}'.format(m, loss))
-        print('[DAVI] pred_time = {:0.2f}, train_time = {:0.2f}'.format(
-            pred_time, train_time))
+        print('[DAVI] pred_time = {:0.2f}, train_time = {:0.2f}'.format(pred_time, train_time))
         m += 1
+        global_step += 1
+
+    return total_loss
 
 
-def entry(epochs=10,
-          lr=0.01,
+def entry(epochs=200,
+          lr=0.05,
           bs=200,
           seed=1,
           cuda=True,
-          log=True):
+          log=True,
+          use_last_model=False):
+    global global_step
 
     wandb.init(project='rubiks')
 
@@ -173,33 +191,56 @@ def entry(epochs=10,
     device = torch.device("cuda" if cuda else "cpu")
 
     model = RubiksNetwork()
+    if use_last_model:
+        model.load_state_dict(torch.load('model-davi.pt'))
     model.to(device)
     optimizer = optim.Adadelta(model.parameters(), lr=lr)
 
+    print('[DAVI] Loading datasets')
+    st = time.time()
+    dataset_train = RubiksDataset('./data/davi.txt', shuffle=True)
+    dataset_test  = RubiksDataset('./data/test.txt', shuffle=True)
+    dataset_eval  = RubiksDataset('./data/eval.txt', shuffle=True)
+    test_labels, test_states = dataset_test.get_next(len(dataset_test))
+    eval_labels, eval_states = dataset_eval.get_next(len(dataset_eval))
+    en = time.time()
+    print('[DAVI] Loaded datasets in {:0.4f} seconds'.format(en-st))
+    print('[DAVI]  * Train = {} '.format(len(dataset_train)))
+    print('[DAVI]  * Test  = {} '.format(len(dataset_test)))
+    print('[DAVI]  * Eval  = {} '.format(len(eval_states)))
+
     for epoch in range(1, epochs+1):
 
-        print('[DAVI] Loading datasets')
-        st = time.time()
-        dataset_train = RubiksDataset('./data/davi.txt', shuffle=True)
-        dataset_test  = RubiksDataset('./data/test.txt', shuffle=True)
-        test_labels, test_states = dataset_test.get_next(len(dataset_test))
-        en = time.time()
-        print('[DAVI] Loaded datasets in {:0.4f} seconds'.format(en-st))
-
         print('[DAVI] Training')
-        davi(model=model,
-             device=device,
-             optim=optimizer,
-             dataset=dataset_train,
-             bs=bs)
+        loss = davi(model=model,
+                    device=device,
+                    optim=optimizer,
+                    dataset=dataset_train,
+                    eval_labels=eval_labels,
+                    eval_states=eval_states,
+                    bs=bs)
+
+        print('[DAVI] Overall loss = {:0.4f}'.format(loss))
+        wandb.log({'LOSS': loss}, step=global_step)
 
         print('[DAVI] Testing')
         accs = calc_accuracy(model, device, test_labels, test_states)
         for k, acc in accs.items():
-            wandb.log({'DAVI-k-{}'.format(k): acc}, step=epoch)
+            wandb.log({'ACC-k-{}'.format(k): acc}, step=global_step)
             print('[DAVI] acc k-{} {}'.format(k, acc))
 
+        model.eval()
+        for i, (label, state) in enumerate(zip(eval_labels, eval_states)):
+            h = hex(hash(state) % (1<<32))
+            x = state.trainable().to(device)
+            x = x.unsqueeze(0)
+            y = float(model(x).item())
+            wandb.log({'EVAL-STATE-{}-{}'.format(h, label): y}, step=global_step)
+
         torch.save(model.state_dict(), 'model-davi.pt')
+
+        dataset_train.reset()
+        dataset_test.reset()
 
 
 if __name__ == '__main__':

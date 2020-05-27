@@ -36,6 +36,7 @@ def generate_states(n, max_scramble_length):
 def entry(n_data=int(5e5),
           n_threads=4,
           name='dataset',
+          dedup=False,
           max_scramble_length=5):
     """Generate the dataset and save it to disk."""
 
@@ -51,6 +52,16 @@ def entry(n_data=int(5e5),
     p = Pool(n_threads)
     states = p.starmap(generate_states, zip(parts, [max_scramble_length]*len(parts)))
     states = list(itertools.chain(*states))  # flatten
+
+    # dedup the values
+    if dedup:
+        uniq = set()
+        deduped = []
+        for k, state in states:
+            if hash(state) not in uniq:
+                uniq.add(hash(state))
+                deduped.append((k, state))
+        states = deduped
 
     # save it onto disk
     print('Saving to disk')
